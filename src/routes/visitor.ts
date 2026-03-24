@@ -1,8 +1,7 @@
 // src/routes/visitor.ts - 访客端页面
 import { Hono } from 'hono'
-import { html } from 'hono/html'
 
-type Bindings = { DB: D1Database; KV: KVNamespace }
+type Bindings = { KV: KVNamespace }
 
 export const visitorRoutes = new Hono<{ Bindings: Bindings }>()
 
@@ -21,7 +20,7 @@ visitorRoutes.get('/', (c) => {
   <div class="text-center text-white">
     <div class="text-6xl mb-6">🤖</div>
     <h1 class="text-3xl font-bold mb-4">AI 分身平台</h1>
-    <p class="text-gray-400 mb-8">访问 <code class="bg-gray-700 px-2 py-1 rounded text-sm">/u/用户名</code> 与他的 AI 分身对话</p>
+    <p class="text-gray-400 mb-8">访问 <code class="bg-gray-700 px-2 py-1 rounded text-sm">/u/用户名</code> 与 TA 的 AI 分身对话</p>
     <a href="/u/demo" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-medium transition">
       试试 Demo 演示
     </a>
@@ -38,9 +37,8 @@ visitorRoutes.get('/', (c) => {
 // 访客主页：/u/:ownerId
 visitorRoutes.get('/u/:ownerId', async (c) => {
   const ownerId = c.req.param('ownerId')
-  const owner = await c.env.DB.prepare(
-    'SELECT id, name, bio, avatar, ai_name FROM owners WHERE id = ?'
-  ).bind(ownerId).first() as any
+  const data = await c.env.KV.get(`owner:${ownerId}`)
+  const owner = data ? JSON.parse(data) : null
 
   if (!owner) {
     return c.html(`<!DOCTYPE html>

@@ -1,9 +1,8 @@
-// src/routes/api.ts - 核心 API 路由
+// src/routes/api.ts - 基于 KV 存储的核心 API
 import { Hono } from 'hono'
-import { generateId, verifyPassword, hashPassword, getOwnerOnlineKey, getSessionKey } from '../lib/utils'
+import { generateId, verifyPassword, hashPassword, kv } from '../lib/utils'
 
 type Bindings = {
-  DB: D1Database
   KV: KVNamespace
   OPENAI_API_KEY: string
   OPENAI_BASE_URL: string
@@ -11,295 +10,371 @@ type Bindings = {
 
 export const apiRoutes = new Hono<{ Bindings: Bindings }>()
 
-// ─── 访客：获取主人主页信息 ───────────────────────────────────
+// ─── 类型定义 ─────────────────────────────────
+interface Owner {
+  id: string
+  name: string
+  bio: string
+  avatar: string
+  ai_name: string
+  ai_persona: string
+  email: string
+  password_hash: string
+  created_at: string
+}
+
+interface Session {
+  id: string
+  owner_id: string
+  visitor_name: string | null
+  status: 'active' | 'taken_over' | 'closed'
+  created_at: string
+  updated_at: string
+}
+
+interface Message {
+  id: string
+  session_id: string
+  role: 'visitor' | 'ai' | 'owner'
+  content: string
+  created_at: string
+}
+
+// ─── KV 辅助函数 ─────────────────────────────
+async function getOwner(kv_ns: KVNamespace, id: string): Promise<Owner | null> {
+  const data = await kv_ns.get(kv.ownerKey(id))
+  return data ? JSON.parse(data) : null
+}
+
+async function getSession(kv_ns: KVNamespace, id: string): Promise<Session | null> {
+  const data = await kv_ns.get(kv.sessionKey(id))
+  return data ? JSON.parse(data) : null
+}
+
+async function getMsgs(kv_ns: KVNamespace, sessionId: string): Promise<Message[]> {
+  const data = await kv_ns.get(kv.msgsKey(sessionId))
+  return data ? JSON.parse(data) : []
+}
+
+async function appendMsg(kv_ns: KVNamespace, sessionId: string, msg: Message): Promise<void> {
+  const msgs = await getMsgs(kv_ns, sessionId)
+  msgs.push(msg)
+  // 只保留最近 100 条
+  const trimmed = msgs.slice(-100)
+  await kv_ns.put(kv.msgsKey(sessionId), JSON.stringify(trimmed), { expirationTtl: 86400 * 30 })
+}
+
+async function getOwnerSessions(kv_ns: KVNamespace, ownerId: string): Promise<string[]> {
+  const data = await kv_ns.get(kv.sessionsKey(ownerId))
+  return data ? JSON.parse(data) : []
+}
+
+async function addSessionToOwner(kv_ns: KVNamespace, ownerId: string, sessionId: string): Promise<void> {
+  const ids = await getOwnerSessions(kv_ns, ownerId)
+  ids.unshift(sessionId) // 最新在前
+  await kv_ns.put(kv.sessionsKey(ownerId), JSON.stringify(ids.slice(0, 100)), { expirationTtl: 86400 * 90 })
+}
+
+// ─── 访客：获取主人主页信息 ───────────────────
 apiRoutes.get('/profile/:ownerId', async (c) => {
   const ownerId = c.req.param('ownerId')
-  const owner = await c.env.DB.prepare(
-    'SELECT id, name, bio, avatar, ai_name, email FROM owners WHERE id = ?'
-  ).bind(ownerId).first()
-
+  const owner = await getOwner(c.env.KV, ownerId)
   if (!owner) return c.json({ error: 'Not found' }, 404)
-  return c.json(owner)
+  const { password_hash, ...pub } = owner
+  return c.json(pub)
 })
 
-// ─── 访客：创建新会话 ─────────────────────────────────────────
+// ─── 访客：创建新会话 ─────────────────────────
 apiRoutes.post('/sessions', async (c) => {
   const body = await c.req.json()
   const { ownerId, visitorName } = body
-
   if (!ownerId) return c.json({ error: 'ownerId required' }, 400)
 
-  // 检查主人是否存在
-  const owner = await c.env.DB.prepare(
-    'SELECT id FROM owners WHERE id = ?'
-  ).bind(ownerId).first()
+  const owner = await getOwner(c.env.KV, ownerId)
   if (!owner) return c.json({ error: 'Owner not found' }, 404)
 
   const sessionId = generateId()
-  await c.env.DB.prepare(
-    'INSERT INTO sessions (id, owner_id, visitor_name) VALUES (?, ?, ?)'
-  ).bind(sessionId, ownerId, visitorName || null).run()
+  const now = new Date().toISOString()
+  const session: Session = {
+    id: sessionId,
+    owner_id: ownerId,
+    visitor_name: visitorName || null,
+    status: 'active',
+    created_at: now,
+    updated_at: now,
+  }
 
-  // 记录会话时间戳到 KV
-  await c.env.KV.put(getSessionKey(sessionId), Date.now().toString(), { expirationTtl: 86400 * 7 })
+  await c.env.KV.put(kv.sessionKey(sessionId), JSON.stringify(session), { expirationTtl: 86400 * 30 })
+  await addSessionToOwner(c.env.KV, ownerId, sessionId)
 
   return c.json({ sessionId })
 })
 
-// ─── 访客/主人：获取会话消息 ──────────────────────────────────
+// ─── 获取会话消息 ──────────────────────────────
 apiRoutes.get('/sessions/:sessionId/messages', async (c) => {
   const sessionId = c.req.param('sessionId')
-  const since = c.req.query('since') // 时间戳，用于轮询增量
+  const since = c.req.query('since')
 
-  let query = 'SELECT id, role, content, created_at FROM messages WHERE session_id = ?'
-  const params: any[] = [sessionId]
+  const session = await getSession(c.env.KV, sessionId)
+  if (!session) return c.json({ error: 'Session not found' }, 404)
 
+  let msgs = await getMsgs(c.env.KV, sessionId)
   if (since) {
-    query += ' AND created_at > ?'
-    params.push(since)
+    msgs = msgs.filter(m => m.created_at > since)
   }
-  query += ' ORDER BY created_at ASC'
 
-  const { results } = await c.env.DB.prepare(query).bind(...params).all()
+  const ownerOnline = await c.env.KV.get(kv.onlineKey(session.owner_id))
 
-  // 获取会话基本信息
-  const session = await c.env.DB.prepare(
-    'SELECT id, owner_id, visitor_name, status, is_owner_online FROM sessions WHERE id = ?'
-  ).bind(sessionId).first()
-
-  return c.json({ messages: results, session })
+  return c.json({
+    messages: msgs,
+    session: { ...session, is_owner_online: ownerOnline === 'true' ? 1 : 0 }
+  })
 })
 
-// ─── 访客：发送消息并触发 AI 回复 ─────────────────────────────
+// ─── 访客发送消息并触发 AI 回复 ───────────────
 apiRoutes.post('/sessions/:sessionId/chat', async (c) => {
   const sessionId = c.req.param('sessionId')
   const body = await c.req.json()
   const { content } = body
-
   if (!content?.trim()) return c.json({ error: 'Content required' }, 400)
 
-  // 获取会话信息
-  const session = await c.env.DB.prepare(
-    'SELECT s.*, o.ai_name, o.ai_persona, o.name as owner_name FROM sessions s JOIN owners o ON s.owner_id = o.id WHERE s.id = ?'
-  ).bind(sessionId).first() as any
-
+  const session = await getSession(c.env.KV, sessionId)
   if (!session) return c.json({ error: 'Session not found' }, 404)
 
-  // 存储访客消息
-  const visitorMsgId = generateId()
+  const owner = await getOwner(c.env.KV, session.owner_id)
+  if (!owner) return c.json({ error: 'Owner not found' }, 404)
+
+  // 存访客消息
   const now = new Date().toISOString()
-  await c.env.DB.prepare(
-    'INSERT INTO messages (id, session_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)'
-  ).bind(visitorMsgId, sessionId, 'visitor', content.trim(), now).run()
+  const visitorMsg: Message = {
+    id: generateId(),
+    session_id: sessionId,
+    role: 'visitor',
+    content: content.trim(),
+    created_at: now,
+  }
+  await appendMsg(c.env.KV, sessionId, visitorMsg)
 
   // 更新会话时间
-  await c.env.DB.prepare(
-    'UPDATE sessions SET updated_at = ? WHERE id = ?'
-  ).bind(now, sessionId).run()
-  await c.env.KV.put(getSessionKey(sessionId), Date.now().toString(), { expirationTtl: 86400 * 7 })
+  session.updated_at = now
+  await c.env.KV.put(kv.sessionKey(sessionId), JSON.stringify(session), { expirationTtl: 86400 * 30 })
 
-  // 检查主人是否在线（在线时主人自己回，AI 暂不自动回）
-  const ownerOnline = await c.env.KV.get(getOwnerOnlineKey(session.owner_id))
+  // 检查主人是否在线
+  const ownerOnline = await c.env.KV.get(kv.onlineKey(session.owner_id))
   if (ownerOnline === 'true') {
-    // 主人在线，只存消息，等主人回复
-    return c.json({
-      visitorMessageId: visitorMsgId,
-      aiReply: null,
-      ownerOnline: true
-    })
+    return c.json({ visitorMessageId: visitorMsg.id, aiReply: null, ownerOnline: true })
   }
 
-  // 获取历史消息（最近 20 条，用于上下文）
-  const { results: history } = await c.env.DB.prepare(
-    'SELECT role, content FROM messages WHERE session_id = ? ORDER BY created_at ASC LIMIT 20'
-  ).bind(sessionId).all() as { results: { role: string; content: string }[] }
+  // 获取历史消息构建上下文
+  const history = await getMsgs(c.env.KV, sessionId)
+  const recent = history.slice(-20)
 
-  // 构建 OpenAI 消息列表
-  const systemPrompt = session.ai_persona ||
-    `你是 ${session.owner_name} 的 AI 分身，名叫 ${session.ai_name}。请代表他/她友好、专业地和来访者对话。`
+  const systemPrompt = owner.ai_persona ||
+    `你是 ${owner.name} 的 AI 分身，名叫 ${owner.ai_name}。请代表他/她友好、专业地和来访者对话。`
 
   const messages = [
     { role: 'system', content: systemPrompt },
-    ...history.map((m: { role: string; content: string }) => ({
+    ...recent.map(m => ({
       role: m.role === 'visitor' ? 'user' : 'assistant',
-      content: m.content
+      content: m.content,
     }))
   ]
 
-  // 调用 OpenAI API
-  let aiContent = '抱歉，我现在无法回复，请稍后再试。'
+  // 调用 OpenAI
+  let aiContent = '你好！有什么可以帮你的吗？'
   try {
-    const baseUrl = c.env.OPENAI_BASE_URL || 'https://api.openai.com'
-    const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+    const baseUrl = (c.env.OPENAI_BASE_URL || 'https://api.openai.com').replace(/\/$/, '')
+    const resp = await fetch(`${baseUrl}/v1/chat/completions`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${c.env.OPENAI_API_KEY}`,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         messages,
         max_tokens: 500,
-        temperature: 0.7
-      })
+        temperature: 0.7,
+      }),
     })
-
-    if (response.ok) {
-      const data = await response.json() as any
+    if (resp.ok) {
+      const data = await resp.json() as any
       aiContent = data.choices?.[0]?.message?.content || aiContent
     }
   } catch (e) {
     console.error('OpenAI error:', e)
   }
 
-  // 存储 AI 回复
-  const aiMsgId = generateId()
-  const aiNow = new Date().toISOString()
-  await c.env.DB.prepare(
-    'INSERT INTO messages (id, session_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)'
-  ).bind(aiMsgId, sessionId, 'ai', aiContent, aiNow).run()
+  const aiMsg: Message = {
+    id: generateId(),
+    session_id: sessionId,
+    role: 'ai',
+    content: aiContent,
+    created_at: new Date().toISOString(),
+  }
+  await appendMsg(c.env.KV, sessionId, aiMsg)
 
-  await c.env.KV.put(getSessionKey(sessionId), Date.now().toString(), { expirationTtl: 86400 * 7 })
-
-  return c.json({
-    visitorMessageId: visitorMsgId,
-    aiReply: { id: aiMsgId, content: aiContent },
-    ownerOnline: false
-  })
+  return c.json({ visitorMessageId: visitorMsg.id, aiReply: { id: aiMsg.id, content: aiContent }, ownerOnline: false })
 })
 
-// ─── 主人：登录 ───────────────────────────────────────────────
+// ─── 主人登录 ──────────────────────────────────
 apiRoutes.post('/owner/login', async (c) => {
-  const body = await c.req.json()
-  const { ownerId, password } = body
-
-  const owner = await c.env.DB.prepare(
-    'SELECT * FROM owners WHERE id = ?'
-  ).bind(ownerId).first() as any
-
+  const { ownerId, password } = await c.req.json()
+  const owner = await getOwner(c.env.KV, ownerId)
   if (!owner) return c.json({ error: '用户不存在' }, 401)
 
   const valid = await verifyPassword(password, owner.password_hash)
   if (!valid) return c.json({ error: '密码错误' }, 401)
 
-  // 生成简单 token 存入 KV（24小时有效）
   const token = generateId()
-  await c.env.KV.put(`token:${token}`, ownerId, { expirationTtl: 86400 })
+  await c.env.KV.put(kv.tokenKey(token), ownerId, { expirationTtl: 86400 })
 
   return c.json({ token, owner: { id: owner.id, name: owner.name, ai_name: owner.ai_name } })
 })
 
-// ─── 主人：登出 ───────────────────────────────────────────────
+// ─── 主人登出 ──────────────────────────────────
 apiRoutes.post('/owner/logout', async (c) => {
   const token = c.req.header('Authorization')?.replace('Bearer ', '')
   if (token) {
-    await c.env.KV.delete(`token:${token}`)
-    const ownerId = await c.env.KV.get(`token:${token}`)
-    if (ownerId) await c.env.KV.delete(getOwnerOnlineKey(ownerId))
+    const ownerId = await c.env.KV.get(kv.tokenKey(token))
+    if (ownerId) await c.env.KV.delete(kv.onlineKey(ownerId))
+    await c.env.KV.delete(kv.tokenKey(token))
   }
   return c.json({ ok: true })
 })
 
-// ─── 主人：验证 token 中间件 ─────────────────────────────────
+// ─── 中间件：验证 token ───────────────────────
 async function requireOwner(c: any, next: any) {
   const token = c.req.header('Authorization')?.replace('Bearer ', '')
   if (!token) return c.json({ error: 'Unauthorized' }, 401)
-
-  const ownerId = await c.env.KV.get(`token:${token}`)
+  const ownerId = await c.env.KV.get(kv.tokenKey(token))
   if (!ownerId) return c.json({ error: 'Token expired' }, 401)
-
   c.set('ownerId', ownerId)
   await next()
 }
 
-// ─── 主人：获取自己的配置信息 ─────────────────────────────────
+// ─── 主人：获取自己信息 ────────────────────────
 apiRoutes.get('/owner/me', requireOwner, async (c) => {
   const ownerId = c.get('ownerId')
-  const owner = await c.env.DB.prepare(
-    'SELECT id, name, bio, avatar, ai_name, ai_persona, email FROM owners WHERE id = ?'
-  ).bind(ownerId).first()
-  return c.json(owner)
+  const owner = await getOwner(c.env.KV, ownerId)
+  if (!owner) return c.json({ error: 'Not found' }, 404)
+  const { password_hash, ...pub } = owner
+  return c.json(pub)
 })
 
-// ─── 主人：更新个人资料和 AI 设置 ────────────────────────────
+// ─── 主人：更新资料 ────────────────────────────
 apiRoutes.put('/owner/profile', requireOwner, async (c) => {
   const ownerId = c.get('ownerId')
-  const body = await c.req.json()
-  const { name, bio, avatar, ai_name, ai_persona, email, password } = body
+  const owner = await getOwner(c.env.KV, ownerId)
+  if (!owner) return c.json({ error: 'Not found' }, 404)
 
-  let query = 'UPDATE owners SET name=?, bio=?, avatar=?, ai_name=?, ai_persona=?, email=?, updated_at=?'
-  const params: any[] = [name, bio, avatar, ai_name, ai_persona, email, new Date().toISOString()]
-
+  const { name, bio, avatar, ai_name, ai_persona, email, password } = await c.req.json()
+  const updated: Owner = {
+    ...owner,
+    name: name ?? owner.name,
+    bio: bio ?? owner.bio,
+    avatar: avatar ?? owner.avatar,
+    ai_name: ai_name ?? owner.ai_name,
+    ai_persona: ai_persona ?? owner.ai_persona,
+    email: email ?? owner.email,
+  }
   if (password) {
-    const hash = await hashPassword(password)
-    query += ', password_hash=?'
-    params.push(hash)
+    updated.password_hash = await hashPassword(password)
   }
 
-  query += ' WHERE id=?'
-  params.push(ownerId)
-
-  await c.env.DB.prepare(query).bind(...params).run()
+  await c.env.KV.put(kv.ownerKey(ownerId), JSON.stringify(updated), { expirationTtl: 86400 * 365 })
   return c.json({ ok: true })
 })
 
-// ─── 主人：获取所有会话列表 ───────────────────────────────────
+// ─── 主人：获取会话列表 ────────────────────────
 apiRoutes.get('/owner/sessions', requireOwner, async (c) => {
   const ownerId = c.get('ownerId')
+  const sessionIds = await getOwnerSessions(c.env.KV, ownerId)
 
-  const { results } = await c.env.DB.prepare(`
-    SELECT s.id, s.visitor_name, s.status, s.created_at, s.updated_at,
-           (SELECT content FROM messages WHERE session_id = s.id ORDER BY created_at DESC LIMIT 1) as last_message,
-           (SELECT COUNT(*) FROM messages WHERE session_id = s.id AND role = 'visitor') as visitor_msg_count
-    FROM sessions s
-    WHERE s.owner_id = ?
-    ORDER BY s.updated_at DESC
-    LIMIT 50
-  `).bind(ownerId).all()
+  const sessions = await Promise.all(
+    sessionIds.slice(0, 50).map(async (id) => {
+      const s = await getSession(c.env.KV, id)
+      if (!s) return null
+      const msgs = await getMsgs(c.env.KV, id)
+      const lastMsg = msgs[msgs.length - 1]
+      return {
+        ...s,
+        last_message: lastMsg?.content || null,
+        visitor_msg_count: msgs.filter(m => m.role === 'visitor').length,
+      }
+    })
+  )
 
-  return c.json({ sessions: results })
+  return c.json({ sessions: sessions.filter(Boolean).sort((a: any, b: any) => b!.updated_at.localeCompare(a!.updated_at)) })
 })
 
-// ─── 主人：心跳（保持在线状态）────────────────────────────────
+// ─── 主人：心跳 ────────────────────────────────
 apiRoutes.post('/owner/heartbeat', requireOwner, async (c) => {
   const ownerId = c.get('ownerId')
-  await c.env.KV.put(getOwnerOnlineKey(ownerId), 'true', { expirationTtl: 30 })
+  await c.env.KV.put(kv.onlineKey(ownerId), 'true', { expirationTtl: 30 })
   return c.json({ ok: true })
 })
 
-// ─── 主人：主动回复某会话 ─────────────────────────────────────
+// ─── 主人：回复会话 ────────────────────────────
 apiRoutes.post('/owner/sessions/:sessionId/reply', requireOwner, async (c) => {
   const ownerId = c.get('ownerId')
   const sessionId = c.req.param('sessionId')
-  const body = await c.req.json()
-  const { content } = body
-
+  const { content } = await c.req.json()
   if (!content?.trim()) return c.json({ error: 'Content required' }, 400)
 
-  // 验证会话归属
-  const session = await c.env.DB.prepare(
-    'SELECT id FROM sessions WHERE id = ? AND owner_id = ?'
-  ).bind(sessionId, ownerId).first()
-  if (!session) return c.json({ error: 'Session not found' }, 404)
+  const session = await getSession(c.env.KV, sessionId)
+  if (!session || session.owner_id !== ownerId) return c.json({ error: 'Session not found' }, 404)
 
-  const msgId = generateId()
-  const now = new Date().toISOString()
-  await c.env.DB.prepare(
-    'INSERT INTO messages (id, session_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)'
-  ).bind(msgId, sessionId, 'owner', content.trim(), now).run()
+  const msg: Message = {
+    id: generateId(),
+    session_id: sessionId,
+    role: 'owner',
+    content: content.trim(),
+    created_at: new Date().toISOString(),
+  }
+  await appendMsg(c.env.KV, sessionId, msg)
 
-  await c.env.DB.prepare(
-    'UPDATE sessions SET updated_at = ?, status = "taken_over" WHERE id = ?'
-  ).bind(now, sessionId).run()
+  session.status = 'taken_over'
+  session.updated_at = msg.created_at
+  await c.env.KV.put(kv.sessionKey(sessionId), JSON.stringify(session), { expirationTtl: 86400 * 30 })
 
-  await c.env.KV.put(getSessionKey(sessionId), Date.now().toString(), { expirationTtl: 86400 * 7 })
-
-  return c.json({ ok: true, messageId: msgId })
+  return c.json({ ok: true, messageId: msg.id })
 })
 
-// ─── 轮询：获取会话最新时间戳（用于判断是否有新消息）─────────
+// ─── 主人注册（初次使用时创建账号）────────────
+apiRoutes.post('/owner/register', async (c) => {
+  const { id, name, password, invite_code } = await c.req.json()
+
+  // 简单邀请码保护，防止陌生人乱注册
+  if (invite_code !== 'MYFRIEND2025') {
+    return c.json({ error: '邀请码错误' }, 403)
+  }
+
+  if (!id || !name || !password) return c.json({ error: '参数不完整' }, 400)
+  if (!/^[a-z0-9_-]{2,30}$/.test(id)) return c.json({ error: '用户名只能包含小写字母、数字、_、-，2-30位' }, 400)
+
+  const exists = await getOwner(c.env.KV, id)
+  if (exists) return c.json({ error: '该用户名已被使用' }, 409)
+
+  const owner: Owner = {
+    id,
+    name,
+    bio: '',
+    avatar: '🤖',
+    ai_name: 'AI助手',
+    ai_persona: `你是 ${name} 的 AI 分身。请代表 ${name} 友好、专业地和来访者对话。`,
+    email: '',
+    password_hash: await hashPassword(password),
+    created_at: new Date().toISOString(),
+  }
+
+  await c.env.KV.put(kv.ownerKey(id), JSON.stringify(owner), { expirationTtl: 86400 * 365 })
+  return c.json({ ok: true })
+})
+
+// ─── 轮询 ping ─────────────────────────────────
 apiRoutes.get('/sessions/:sessionId/ping', async (c) => {
   const sessionId = c.req.param('sessionId')
-  const ts = await c.env.KV.get(getSessionKey(sessionId))
-  return c.json({ ts: ts || '0' })
+  const session = await getSession(c.env.KV, sessionId)
+  return c.json({ ts: session?.updated_at || '0' })
 })

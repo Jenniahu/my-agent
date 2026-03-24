@@ -1,7 +1,7 @@
 // src/routes/owner.ts - 主人端后台
 import { Hono } from 'hono'
 
-type Bindings = { DB: D1Database; KV: KVNamespace }
+type Bindings = { KV: KVNamespace }
 
 export const ownerRoutes = new Hono<{ Bindings: Bindings }>()
 
@@ -18,6 +18,11 @@ ownerRoutes.get('/dashboard', (c) => {
 // 设置页
 ownerRoutes.get('/settings', (c) => {
   return c.html(settingsPage())
+})
+
+// 注册页
+ownerRoutes.get('/register', (c) => {
+  return c.html(registerPage())
 })
 
 function loginPage() {
@@ -706,6 +711,80 @@ function copyLink() {
 }
 
 loadSettings()
+</script>
+</body>
+</html>`
+}
+
+function registerPage() {
+  return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>注册账号</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-gray-900 flex items-center justify-center text-white">
+<div class="w-full max-w-sm px-4">
+  <div class="text-center mb-8">
+    <div class="text-5xl mb-4">🤖</div>
+    <h1 class="text-2xl font-bold">创建你的 AI 分身</h1>
+    <p class="text-gray-400 text-sm mt-2">注册后获得专属访客链接</p>
+  </div>
+  <div class="bg-gray-800 rounded-2xl p-6 shadow-xl">
+    <div id="errorMsg" class="hidden bg-red-900/50 border border-red-700 text-red-300 text-sm rounded-xl px-4 py-3 mb-4"></div>
+    <div class="mb-4">
+      <label class="block text-sm text-gray-400 mb-2">用户名 <span class="text-gray-600 text-xs">（只能用小写字母/数字/_/-）</span></label>
+      <input type="text" id="userId" placeholder="如：yourname" class="w-full bg-gray-700 text-white rounded-xl px-4 py-3 outline-none border border-gray-600 focus:border-blue-500 transition placeholder-gray-500">
+    </div>
+    <div class="mb-4">
+      <label class="block text-sm text-gray-400 mb-2">显示名称</label>
+      <input type="text" id="userName" placeholder="如：张三" class="w-full bg-gray-700 text-white rounded-xl px-4 py-3 outline-none border border-gray-600 focus:border-blue-500 transition placeholder-gray-500">
+    </div>
+    <div class="mb-4">
+      <label class="block text-sm text-gray-400 mb-2">登录密码</label>
+      <input type="password" id="password" placeholder="••••••••" class="w-full bg-gray-700 text-white rounded-xl px-4 py-3 outline-none border border-gray-600 focus:border-blue-500 transition placeholder-gray-500">
+    </div>
+    <div class="mb-6">
+      <label class="block text-sm text-gray-400 mb-2">邀请码</label>
+      <input type="text" id="inviteCode" placeholder="请输入邀请码" class="w-full bg-gray-700 text-white rounded-xl px-4 py-3 outline-none border border-gray-600 focus:border-blue-500 transition placeholder-gray-500">
+    </div>
+    <button onclick="doRegister()" id="regBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-3 font-semibold transition">
+      创建账号
+    </button>
+  </div>
+  <div class="mt-4 text-center">
+    <a href="/owner/login" class="text-gray-600 hover:text-gray-400 text-sm transition">已有账号？去登录 →</a>
+  </div>
+</div>
+<script>
+async function doRegister() {
+  const id = document.getElementById('userId').value.trim().toLowerCase()
+  const name = document.getElementById('userName').value.trim()
+  const password = document.getElementById('password').value
+  const invite_code = document.getElementById('inviteCode').value.trim()
+  const btn = document.getElementById('regBtn')
+  const errEl = document.getElementById('errorMsg')
+  errEl.classList.add('hidden')
+  if (!id || !name || !password || !invite_code) { showErr('请填写所有字段'); return }
+  btn.disabled = true; btn.textContent = '注册中...'
+  try {
+    const resp = await fetch('/api/owner/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, name, password, invite_code })
+    })
+    const data = await resp.json()
+    if (!resp.ok) { showErr(data.error || '注册失败'); btn.disabled=false; btn.textContent='创建账号'; return }
+    alert('注册成功！请登录')
+    window.location.href = '/owner/login'
+  } catch(e) { showErr('网络错误'); btn.disabled=false; btn.textContent='创建账号' }
+}
+function showErr(msg) {
+  const el = document.getElementById('errorMsg')
+  el.textContent = msg; el.classList.remove('hidden')
+}
 </script>
 </body>
 </html>`

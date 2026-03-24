@@ -1,4 +1,4 @@
-// src/lib/utils.ts - 工具函数
+// src/lib/utils.ts
 
 export function generateId(): string {
   return crypto.randomUUID()
@@ -18,12 +18,19 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
   return computed === hash
 }
 
-// 从 KV 获取 owner 的在线状态（用于轮询）
-export function getOwnerOnlineKey(ownerId: string): string {
-  return `owner_online:${ownerId}`
-}
+// ─── KV Key 规范 ─────────────────────────────
+// owner:{id}              → Owner 对象
+// sessions:{ownerId}      → string[] session IDs（按时间倒序）
+// session:{id}            → Session 对象
+// msgs:{sessionId}        → Message[] 数组
+// token:{token}           → ownerId string
+// online:{ownerId}        → 'true' (TTL 30s)
 
-// 会话最新消息的 KV key（用于实时轮询）
-export function getSessionKey(sessionId: string): string {
-  return `session_ts:${sessionId}`
+export const kv = {
+  ownerKey: (id: string) => `owner:${id}`,
+  sessionsKey: (ownerId: string) => `sessions:${ownerId}`,
+  sessionKey: (id: string) => `session:${id}`,
+  msgsKey: (sessionId: string) => `msgs:${sessionId}`,
+  tokenKey: (token: string) => `token:${token}`,
+  onlineKey: (ownerId: string) => `online:${ownerId}`,
 }

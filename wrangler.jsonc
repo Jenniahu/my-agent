@@ -1,23 +1,16 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "webapp",
+  "name": "my-agent",
   "compatibility_date": "2026-03-24",
   "pages_build_output_dir": "./dist",
   "compatibility_flags": [
     "nodejs_compat"
   ],
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "webapp-production",
-      "database_id": "local-dev-placeholder"
-    }
-  ],
   "kv_namespaces": [
     {
       "binding": "KV",
-      "id": "local-dev-placeholder",
-      "preview_id": "local-dev-placeholder"
+      "id": "b9e86b03d8614902a4a824da3b754903",
+      "preview_id": "b9e86b03d8614902a4a824da3b754903"
     }
   ]
 }
