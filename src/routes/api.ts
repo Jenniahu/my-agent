@@ -183,15 +183,21 @@ apiRoutes.post('/sessions/:sessionId/chat', async (c) => {
   // 调用 OpenAI
   let aiContent = '你好！有什么可以帮你的吗？'
   try {
-    const baseUrl = (c.env.OPENAI_BASE_URL || 'https://api.openai.com').replace(/\/$/, '')
-    const resp = await fetch(`${baseUrl}/v1/chat/completions`, {
+    // 智能处理 URL：如果已经包含 /chat/completions 就直接用，否则拼接
+    const rawUrl = (c.env.OPENAI_BASE_URL || 'https://api.openai.com').replace(/\/$/, '')
+    const apiUrl = rawUrl.includes('/chat/completions')
+      ? rawUrl
+      : `${rawUrl}/v1/chat/completions`
+
+    console.log('[AI] calling:', apiUrl)
+    const resp = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${c.env.OPENAI_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: 'MiniMax-M2.5',
         messages,
         max_tokens: 500,
         temperature: 0.7,
@@ -200,9 +206,12 @@ apiRoutes.post('/sessions/:sessionId/chat', async (c) => {
     if (resp.ok) {
       const data = await resp.json() as any
       aiContent = data.choices?.[0]?.message?.content || aiContent
+    } else {
+      const errText = await resp.text()
+      console.error('[AI] API error:', resp.status, errText)
     }
   } catch (e) {
-    console.error('OpenAI error:', e)
+    console.error('[AI] fetch error:', e)
   }
 
   const aiMsg: Message = {
@@ -377,4 +386,39 @@ apiRoutes.get('/sessions/:sessionId/ping', async (c) => {
   const sessionId = c.req.param('sessionId')
   const session = await getSession(c.env.KV, sessionId)
   return c.json({ ts: session?.updated_at || '0' })
+})
+
+// ─── 临时调试：测试 AI 接口连通性 ──────────────
+apiRoutes.get('/debug/ai-test', async (c) => {
+  const rawUrl = (c.env.OPENAI_BASE_URL || '').replace(/\/$/, '')
+  const apiUrl = rawUrl.includes('/chat/completions')
+    ? rawUrl
+    : `${rawUrl}/v1/chat/completions`
+  const hasKey = !!c.env.OPENAI_API_KEY
+  const keyPrefix = c.env.OPENAI_API_KEY?.slice(0, 8) + '...'
+
+  let result: any = { apiUrl, hasKey, keyPrefix }
+
+  try {
+    const resp = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${c.env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'MiniMax-M2.5',
+        messages: [{ role: 'user', content: 'say hi' }],
+        max_tokens: 10,
+      }),
+    })
+    const text = await resp.text()
+    result.status = resp.status
+    result.ok = resp.ok
+    result.response = text.slice(0, 500)
+  } catch (e: any) {
+    result.error = e?.message || String(e)
+  }
+
+  return c.json(result)
 })

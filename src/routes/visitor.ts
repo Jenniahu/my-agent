@@ -69,7 +69,7 @@ function visitorChatPage(owner: any): string {
   <style>
     * { box-sizing: border-box; }
     body { background: #0f0f0f; }
-    .chat-container { height: calc(100vh - 0px); }
+    .chat-container { height: calc(100vh - 0px); max-width: 780px; margin: 0 auto; }
     .messages-area { 
       height: calc(100% - 140px);
       overflow-y: auto;
@@ -89,7 +89,7 @@ function visitorChatPage(owner: any): string {
 </head>
 <body class="text-white">
 
-<div class="chat-container max-w-lg mx-auto flex flex-col" id="app">
+<div class="chat-container w-full flex flex-col" id="app">
   
   <!-- 顶部信息栏 -->
   <div class="flex items-center gap-3 px-4 py-3 border-b border-gray-800 bg-gray-900/80 backdrop-blur sticky top-0 z-10">
