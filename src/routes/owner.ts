@@ -285,6 +285,7 @@ let heartbeatTimer = null
 let pollTimer = null
 let lastMsgTs = '0'
 let sessionsData = []
+const renderedOwnerIds = new Set()
 
 // ─── 心跳：保持在线状态 ───────────────
 function startHeartbeat() {
@@ -380,7 +381,7 @@ async function openSession(sessionId, visitorName, createdAt, status) {
     area.innerHTML = ''
     if (data.messages && data.messages.length > 0) {
       data.messages.forEach(m => {
-        appendOwnerMessage(m.role, m.content, m.created_at)
+        appendOwnerMessage(m.role, m.content, m.created_at, m.id)
         lastMsgTs = m.created_at
       })
     } else {
@@ -409,7 +410,7 @@ async function pollNewMessages() {
     
     if (data.messages && data.messages.length > 0) {
       data.messages.forEach(m => {
-        appendOwnerMessage(m.role, m.content, m.created_at)
+        appendOwnerMessage(m.role, m.content, m.created_at, m.id)
         lastMsgTs = m.created_at
       })
       const area = document.getElementById('ownerMessagesArea')
@@ -421,7 +422,11 @@ async function pollNewMessages() {
 }
 
 // ─── 渲染消息 ─────────────────────────
-function appendOwnerMessage(role, content, time) {
+function appendOwnerMessage(role, content, time, id) {
+  if (id) {
+    if (renderedOwnerIds.has(id)) return
+    renderedOwnerIds.add(id)
+  }
   const area = document.getElementById('ownerMessagesArea')
   const isVisitor = role === 'visitor'
   const isOwner = role === 'owner'
@@ -478,8 +483,9 @@ async function sendOwnerReply() {
     })
     
     if (resp.ok) {
+      const data = await resp.json()
       const now = new Date().toISOString()
-      appendOwnerMessage('owner', content, now)
+      appendOwnerMessage('owner', content, now, data.messageId)
       document.getElementById('ownerMessagesArea').scrollTop = 99999
       document.getElementById('takenOverBadge').classList.remove('hidden')
       loadSessions()
