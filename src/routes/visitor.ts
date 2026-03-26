@@ -66,6 +66,8 @@ function visitorChatPage(owner: any): string {
   <title>和 ${owner.ai_name} 聊天 · ${owner.name}</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
+  <!-- marked.js：渲染 Markdown -->
+  <script src="https://cdn.jsdelivr.net/npm/marked@9.1.6/marked.min.js"></script>
   <style>
     * { box-sizing: border-box; }
     body { background: #0f0f0f; }
@@ -79,12 +81,31 @@ function visitorChatPage(owner: any): string {
     .messages-area::-webkit-scrollbar-track { background: transparent; }
     .messages-area::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
     .msg-bubble { max-width: 72%; word-break: break-word; }
+    /* Markdown 内容样式 */
+    .md-content p { margin-bottom: 0.5em; }
+    .md-content p:last-child { margin-bottom: 0; }
+    .md-content ul, .md-content ol { padding-left: 1.4em; margin-bottom: 0.5em; }
+    .md-content li { margin-bottom: 0.25em; }
+    .md-content strong { font-weight: 600; color: #e2e8f0; }
+    .md-content em { font-style: italic; color: #a0aec0; }
+    .md-content code { background: #1a1a2e; color: #90cdf4; padding: 1px 5px; border-radius: 4px; font-size: 0.85em; font-family: monospace; }
+    .md-content pre { background: #1a1a2e; border-radius: 8px; padding: 10px 14px; margin: 6px 0; overflow-x: auto; }
+    .md-content pre code { background: none; padding: 0; color: #90cdf4; }
+    .md-content h1,.md-content h2,.md-content h3 { font-weight: 700; margin: 0.5em 0 0.3em; color: #e2e8f0; }
+    .md-content h1 { font-size: 1.1em; }
+    .md-content h2 { font-size: 1.05em; }
+    .md-content h3 { font-size: 1em; }
+    .md-content blockquote { border-left: 3px solid #4a5568; padding-left: 10px; margin: 6px 0; color: #a0aec0; }
+    .md-content hr { border-color: #2d3748; margin: 8px 0; }
+    .md-content a { color: #63b3ed; text-decoration: underline; }
     .typing-dot { animation: bounce 1.2s infinite; }
     .typing-dot:nth-child(2) { animation-delay: 0.2s; }
     .typing-dot:nth-child(3) { animation-delay: 0.4s; }
     @keyframes bounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-6px)} }
     .fade-in { animation: fadeIn 0.3s ease-in; }
     @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+    /* 打断按钮 */
+    #cancelBtn { transition: opacity 0.2s; }
   </style>
 </head>
 <body class="text-white">
@@ -139,14 +160,21 @@ function visitorChatPage(owner: any): string {
         class="flex-1 bg-gray-800 text-white text-sm rounded-xl px-4 py-3 outline-none border border-gray-700 focus:border-blue-500 transition resize-none placeholder-gray-500 leading-relaxed"
         style="min-height:44px;max-height:120px;overflow-y:auto"
       ></textarea>
-      <button id="sendBtn" 
-        class="bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed text-white w-11 h-11 rounded-xl flex items-center justify-center transition flex-shrink-0"
-        onclick="sendMessage()">
-        <i class="fas fa-paper-plane text-sm"></i>
-      </button>
+      <div class="flex flex-col gap-1">
+        <button id="sendBtn" 
+          class="bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed text-white w-11 h-11 rounded-xl flex items-center justify-center transition flex-shrink-0"
+          onclick="sendMessage()">
+          <i class="fas fa-paper-plane text-sm"></i>
+        </button>
+        <button id="cancelBtn"
+          class="hidden bg-red-600/80 hover:bg-red-700 text-white w-11 h-11 rounded-xl flex items-center justify-center transition flex-shrink-0"
+          onclick="cancelWaiting()" title="取消，重新提问">
+          <i class="fas fa-stop text-sm"></i>
+        </button>
+      </div>
     </div>
     <div class="text-xs text-gray-600 mt-2 text-center">
-      内测版 · 仅支持文字对话
+      等待回复时可点 <i class="fas fa-stop text-xs"></i> 打断并重新提问
     </div>
   </div>
 
@@ -159,7 +187,13 @@ let sessionId = null
 let lastTs = '0'
 let pollTimer = null
 let isWaiting = false
+let currentAbortId = null  // 当前请求标识，用于打断
 const renderedIds = new Set() // 已渲染消息 ID，防止重复
+
+// 配置 marked 渲染器（安全起见，不允许 HTML 注入）
+if (typeof marked !== 'undefined') {
+  marked.setOptions({ breaks: true, gfm: true })
+}
 
 // 自动调整 textarea 高度
 const textarea = document.getElementById('messageInput')
@@ -194,6 +228,21 @@ async function initSession() {
   return sessionId
 }
 
+// 打断当前等待，允许用户重新输入
+function cancelWaiting() {
+  currentAbortId = null  // 使进行中的 fetch 回调失效
+  hideTyping()
+  isWaiting = false
+  const sendBtn = document.getElementById('sendBtn')
+  const cancelBtn = document.getElementById('cancelBtn')
+  sendBtn.disabled = false
+  sendBtn.classList.remove('hidden')
+  cancelBtn.classList.add('hidden')
+  document.getElementById('messageInput').disabled = false
+  document.getElementById('messageInput').focus()
+  appendSystemMsg('已打断，可重新提问 ↑')
+}
+
 async function sendMessage() {
   if (isWaiting) return
   const input = document.getElementById('messageInput')
@@ -207,10 +256,17 @@ async function sendMessage() {
 
   input.value = ''
   input.style.height = 'auto'
-  document.getElementById('sendBtn').disabled = true
+  input.disabled = true
+  const sendBtn = document.getElementById('sendBtn')
+  const cancelBtn = document.getElementById('cancelBtn')
+  sendBtn.disabled = true
+  sendBtn.classList.add('hidden')
+  cancelBtn.classList.remove('hidden')
   isWaiting = true
 
-  // 先不渲染访客消息，等 API 返回带 ID 后再渲染，避免轮询重复
+  // 生成本次请求 ID，用于打断判断
+  const myAbortId = Date.now() + Math.random()
+  currentAbortId = myAbortId
 
   // 显示 typing 指示器
   showTyping()
@@ -223,6 +279,9 @@ async function sendMessage() {
     })
     const data = await resp.json()
 
+    // 如果已被打断，则丢弃这次结果
+    if (currentAbortId !== myAbortId) return
+
     hideTyping()
 
     // 渲染访客消息（带 ID，轮询不会重复）
@@ -234,13 +293,21 @@ async function sendMessage() {
       appendMessage('ai', data.aiReply.content, data.aiReply.id)
     }
   } catch(e) {
+    if (currentAbortId !== myAbortId) return
     hideTyping()
     appendSystemMsg('发送失败，请重试')
   }
 
-  isWaiting = false
-  document.getElementById('sendBtn').disabled = false
-  document.getElementById('messageInput').focus()
+  // 恢复输入状态
+  if (currentAbortId === myAbortId) {
+    isWaiting = false
+    currentAbortId = null
+    input.disabled = false
+    sendBtn.disabled = false
+    sendBtn.classList.remove('hidden')
+    cancelBtn.classList.add('hidden')
+    input.focus()
+  }
 }
 
 function appendMessage(role, content, id) {
@@ -266,14 +333,19 @@ function appendMessage(role, content, id) {
 
   const label = isVisitor ? '' : (isOwner ? '<div class="text-xs text-gray-500 mt-1 pl-1">本人</div>' : '<div class="text-xs text-gray-600 mt-1 pl-1">' + AI_NAME + '</div>')
 
+  // 访客消息用纯文本，AI/owner 消息渲染 Markdown
+  const bodyHtml = isVisitor
+    ? escapeHtml(content)
+    : renderMd(content)
+
   div.innerHTML = isVisitor ? \`
     <div>
-      <div class="msg-bubble \${bubbleClass} px-4 py-3 text-sm leading-relaxed">\${escapeHtml(content)}</div>
+      <div class="msg-bubble \${bubbleClass} px-4 py-3 text-sm leading-relaxed">\${bodyHtml}</div>
     </div>
   \` : \`
     <div class="w-8 h-8 rounded-full \${isOwner ? 'bg-emerald-700' : 'bg-gradient-to-br from-blue-500 to-purple-600'} flex items-center justify-center text-sm flex-shrink-0">\${avatar}</div>
     <div>
-      <div class="msg-bubble \${bubbleClass} px-4 py-3 text-sm leading-relaxed">\${escapeHtml(content)}</div>
+      <div class="msg-bubble md-content \${bubbleClass} px-4 py-3 text-sm leading-relaxed">\${bodyHtml}</div>
       \${label}
     </div>
   \`
@@ -314,7 +386,18 @@ function hideTyping() {
 }
 
 function escapeHtml(text) {
-  return text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\\n/g,'<br>')
+  return String(text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')
+}
+
+// 渲染 Markdown（AI / owner 消息专用）
+function renderMd(text) {
+  try {
+    if (typeof marked !== 'undefined') {
+      return marked.parse(String(text))
+    }
+  } catch(e) {}
+  // fallback：纯文本
+  return escapeHtml(text)
 }
 
 // 轮询新消息（主人回复时用）

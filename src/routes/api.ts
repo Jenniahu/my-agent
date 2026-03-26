@@ -167,7 +167,7 @@ apiRoutes.post('/sessions/:sessionId/chat', async (c) => {
 
   // 获取历史消息构建上下文
   const history = await getMsgs(c.env.KV, sessionId)
-  const recent = history.slice(-20)
+  const recent = history.slice(-40)  // 扩展到 40 条上下文
 
   const systemPrompt = owner.ai_persona ||
     `你是 ${owner.name} 的 AI 分身，名叫 ${owner.ai_name}。请代表他/她友好、专业地和来访者对话。`
@@ -199,7 +199,7 @@ apiRoutes.post('/sessions/:sessionId/chat', async (c) => {
       body: JSON.stringify({
         model: 'MiniMax-M2.5',
         messages,
-        max_tokens: 500,
+        max_tokens: 1500,  // 增加输出长度上限，支持详细回复
         temperature: 0.7,
       }),
     })

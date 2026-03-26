@@ -139,6 +139,7 @@ function dashboardPage() {
   <title>我的对话 - 主人后台</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/marked@9.1.6/marked.min.js"></script>
   <style>
     * { box-sizing: border-box; }
     body { background: #0f0f0f; }
@@ -152,6 +153,17 @@ function dashboardPage() {
     .messages-area::-webkit-scrollbar-track { background: transparent; }
     .messages-area::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
     .msg-bubble { max-width: 72%; word-break: break-word; }
+    /* Markdown 内容样式 */
+    .md-content p { margin-bottom: 0.5em; }
+    .md-content p:last-child { margin-bottom: 0; }
+    .md-content ul, .md-content ol { padding-left: 1.4em; margin-bottom: 0.5em; }
+    .md-content li { margin-bottom: 0.25em; }
+    .md-content strong { font-weight: 600; color: #e2e8f0; }
+    .md-content code { background: #1a1a2e; color: #90cdf4; padding: 1px 5px; border-radius: 4px; font-size: 0.85em; font-family: monospace; }
+    .md-content pre { background: #1a1a2e; border-radius: 8px; padding: 10px 14px; margin: 6px 0; overflow-x: auto; }
+    .md-content pre code { background: none; padding: 0; }
+    .md-content h1,.md-content h2,.md-content h3 { font-weight: 700; margin: 0.5em 0 0.3em; color: #e2e8f0; }
+    .md-content blockquote { border-left: 3px solid #4a5568; padding-left: 10px; margin: 6px 0; color: #a0aec0; }
     .session-item:hover { background: rgba(255,255,255,0.05); }
     .session-item.active { background: rgba(59,130,246,0.15); border-color: rgba(59,130,246,0.4) !important; }
     .fade-in { animation: fadeIn 0.3s ease-in; }
@@ -445,16 +457,19 @@ function appendOwnerMessage(role, content, time, id) {
       : 'bg-gray-800 text-gray-100 rounded-2xl rounded-tl-sm'
   const label = isVisitor ? '访客' : (isOwner ? '<span class="text-emerald-400">本人</span>' : (aiName || 'AI'))
 
+  const bodyHtml = isVisitor ? escHtml(content) : renderMdOwner(content)
+  const mdClass = isVisitor ? '' : ' md-content'
+
   div.innerHTML = isVisitor ? \`
     <div>
-      <div class="msg-bubble \${bubbleClass} px-4 py-3 text-sm leading-relaxed">\${escHtml(content)}</div>
+      <div class="msg-bubble \${bubbleClass} px-4 py-3 text-sm leading-relaxed">\${bodyHtml}</div>
       <div class="text-xs text-gray-600 mt-1 text-right pr-1">\${label} · \${timeStr}</div>
     </div>
     <div class="w-8 h-8 rounded-full \${avatarBg} flex items-center justify-center text-sm flex-shrink-0">\${avatar}</div>
   \` : \`
     <div class="w-8 h-8 rounded-full \${avatarBg} flex items-center justify-center text-sm flex-shrink-0">\${avatar}</div>
     <div>
-      <div class="msg-bubble \${bubbleClass} px-4 py-3 text-sm leading-relaxed">\${escHtml(content)}</div>
+      <div class="msg-bubble\${mdClass} \${bubbleClass} px-4 py-3 text-sm leading-relaxed">\${bodyHtml}</div>
       <div class="text-xs text-gray-600 mt-1 pl-1">\${label} · \${timeStr}</div>
     </div>
   \`
@@ -517,6 +532,16 @@ async function doLogout() {
 function escHtml(text) {
   if (!text) return ''
   return String(text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\\n/g,'<br>')
+}
+
+// Markdown 渲染（AI/owner 消息专用）
+function renderMdOwner(text) {
+  try {
+    if (typeof marked !== 'undefined') {
+      return marked.parse(String(text || ''))
+    }
+  } catch(e) {}
+  return escHtml(text)
 }
 
 // Enter 发送
