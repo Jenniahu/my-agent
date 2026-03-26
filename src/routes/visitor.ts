@@ -210,8 +210,7 @@ async function sendMessage() {
   document.getElementById('sendBtn').disabled = true
   isWaiting = true
 
-  // 显示访客消息
-  appendMessage('visitor', content)
+  // 先不渲染访客消息，等 API 返回带 ID 后再渲染，避免轮询重复
 
   // 显示 typing 指示器
   showTyping()
@@ -225,6 +224,9 @@ async function sendMessage() {
     const data = await resp.json()
 
     hideTyping()
+
+    // 渲染访客消息（带 ID，轮询不会重复）
+    appendMessage('visitor', content, data.visitorMessageId)
 
     if (data.ownerOnline) {
       appendSystemMsg('本人正在查看，稍等回复...')
