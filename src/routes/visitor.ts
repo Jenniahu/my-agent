@@ -159,6 +159,7 @@ let sessionId = null
 let lastTs = '0'
 let pollTimer = null
 let isWaiting = false
+const renderedIds = new Set() // 已渲染消息 ID，防止重复
 
 // 自动调整 textarea 高度
 const textarea = document.getElementById('messageInput')
@@ -226,10 +227,9 @@ async function sendMessage() {
     hideTyping()
 
     if (data.ownerOnline) {
-      // 主人在线，等待主人回复
       appendSystemMsg('本人正在查看，稍等回复...')
     } else if (data.aiReply) {
-      appendMessage('ai', data.aiReply.content)
+      appendMessage('ai', data.aiReply.content, data.aiReply.id)
     }
   } catch(e) {
     hideTyping()
@@ -242,6 +242,11 @@ async function sendMessage() {
 }
 
 function appendMessage(role, content, id) {
+  // 有 ID 时做去重，防止轮询和直接渲染重复
+  if (id) {
+    if (renderedIds.has(id)) return
+    renderedIds.add(id)
+  }
   const area = document.getElementById('messagesArea')
   const isVisitor = role === 'visitor'
   const isOwner = role === 'owner'
@@ -331,9 +336,8 @@ function startPolling() {
 
       if (data.messages && data.messages.length > 0) {
         data.messages.forEach(msg => {
-          if (msg.role === 'owner' || (msg.role === 'ai' && !isWaiting)) {
-            appendMessage(msg.role, msg.content, msg.id)
-          }
+          // 统一用 ID 去重，owner 和 ai 消息都走这里
+          appendMessage(msg.role, msg.content, msg.id)
           lastTs = msg.created_at
         })
       }
