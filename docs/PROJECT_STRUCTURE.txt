@@ -1,0 +1,392 @@
+# 项目结构说明
+
+## 📁 目录结构
+
+```
+webapp/
+├── src/                           # 源代码目录
+│   ├── index.tsx                  # 主入口文件，路由配置
+│   ├── renderer.tsx               # HTML 渲染器
+│   ├── lib/                       # 工具函数库
+│   │   └── utils.ts               # KV 键名、密码哈希、ID 生成
+│   └── routes/                    # 路由模块
+│       ├── api.ts                 # 🔴 核心 API 路由（工具定义在这里！）
+│       ├── visitor.ts             # 访客页面路由
+│       └── owner.ts               # 主人后台路由
+│
+├── public/                        # 静态资源目录
+│   └── static/                    # 静态文件
+│       ├── visitor-chat.js        # 访客页面前端 JavaScript
+│       └── style.css              # 自定义 CSS
+│
+├── docs/                          # 文档目录
+│   ├── function-calling-explained.md      # 工具调用原理深度解析
+│   ├── tool-examples.js                   # 工具添加示例代码
+│   ├── TOOL_IMPLEMENTATION_SUMMARY.md     # 工具实现总结
+│   └── PROJECT_STRUCTURE.txt              # 项目结构（本文件）
+│
+├── scripts/                       # 脚本目录
+│   └── test-tools.sh              # 工具调用自动化测试脚本
+│
+├── migrations/                    # 数据库迁移文件（预留）
+│   ├── 0001_init.sql              # 初始化表结构
+│   └── 0002_seed.sql              # 测试数据
+│
+├── .dev.vars                      # 本地环境变量（敏感信息，不提交）
+├── .gitignore                     # Git 忽略配置
+├── ecosystem.config.cjs           # PM2 配置文件（开发环境）
+├── package.json                   # 依赖和脚本配置
+├── package-lock.json              # 依赖锁定文件
+├── tsconfig.json                  # TypeScript 配置
+├── vite.config.ts                 # Vite 构建配置
+├── wrangler.jsonc                 # Cloudflare Pages 配置
+└── README.md                      # 项目文档
+```
+
+---
+
+## 🔴 核心文件说明
+
+### 1. `src/routes/api.ts` （最重要！）
+
+**工具定义和执行都在这个文件**
+
+#### 文件结构：
+
+```typescript
+// ─── 导入模块 ─────────────────────────────────
+import { Hono } from 'hono'
+import { generateId, verifyPassword, hashPassword, kv } from '../lib/utils'
+
+// ─── 类型定义 ─────────────────────────────────
+type Bindings = { ... }
+interface Owner { ... }
+interface Session { ... }
+interface Message { ... }
+
+// ─── 工具定义 ───────────────────────────────── (Line 11-77)
+const tools = [
+  {
+    type: 'function',
+    function: {
+      name: 'get_current_time',
+      description: '获取当前时间（北京时间）',
+      parameters: { ... }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'search_owner_info',
+      description: '搜索主人的专业技能、项目经验或服务信息',
+      parameters: { ... }
+    }
+  }
+]
+
+// ─── 工具执行函数 ───────────────────────────── (Line 79-140)
+async function executeToolCall(
+  name: string,
+  args: any,
+  owner: Owner
+): Promise<string> {
+  switch (name) {
+    case 'get_current_time':
+      // 实现逻辑
+      return JSON.stringify({ ... })
+    
+    case 'search_owner_info':
+      // 实现逻辑
+      return JSON.stringify({ ... })
+    
+    default:
+      return JSON.stringify({ error: 'Unknown tool' })
+  }
+}
+
+// ─── KV 辅助函数 ─────────────────────────────
+async function getOwner(...) { ... }
+async function getSession(...) { ... }
+async function getMsgs(...) { ... }
+async function appendMsg(...) { ... }
+
+// ─── API 路由定义 ────────────────────────────
+export const apiRoutes = new Hono<{ Bindings: Bindings }>()
+
+// 访客端路由
+apiRoutes.get('/profile/:ownerId', ...)           # 获取主人公开信息
+apiRoutes.post('/sessions', ...)                  # 创建会话
+apiRoutes.get('/sessions/:sessionId/messages', ...)  # 获取消息
+apiRoutes.post('/sessions/:sessionId/chat', ...)  # 发送消息并触发 AI (工具调用在这里！)
+
+// 主人端路由
+apiRoutes.post('/owner/login', ...)               # 主人登录
+apiRoutes.post('/owner/logout', ...)              # 主人登出
+apiRoutes.get('/owner/verify', ...)               # 验证登录状态
+apiRoutes.get('/owner/profile', ...)              # 获取主人信息
+apiRoutes.put('/owner/profile', ...)              # 更新主人信息
+apiRoutes.get('/owner/sessions', ...)             # 获取会话列表
+apiRoutes.post('/owner/heartbeat', ...)           # 在线心跳
+apiRoutes.post('/owner/sessions/:sessionId/reply', ...)  # 主人回复
+
+// 调试路由
+apiRoutes.post('/owner/register', ...)            # 注册主人（开发用）
+apiRoutes.get('/ping', ...)                       # 健康检查
+apiRoutes.post('/test-ai', ...)                   # 测试 AI 连接
+```
+
+#### 工具调用逻辑（Line 258-367）：
+
+```typescript
+apiRoutes.post('/sessions/:sessionId/chat', async (c) => {
+  // 1. 保存访客消息
+  // 2. 检查主人是否在线
+  // 3. 构建上下文（最近 40 条消息）
+  
+  // 4. 第一次调用 OpenAI（传入工具列表）
+  let resp = await fetch(apiUrl, {
+    body: JSON.stringify({
+      model: 'MiniMax-M2.5',
+      messages,
+      tools,  // ← 传入工具定义
+      tool_choice: 'auto'
+    })
+  })
+  
+  // 5. 检查是否需要调用工具
+  if (message?.tool_calls) {
+    // 6. 执行工具
+    for (const toolCall of message.tool_calls) {
+      const result = await executeToolCall(...)
+      toolMessages.push({ role: 'tool', content: result })
+    }
+    
+    // 7. 第二次调用 OpenAI（传入工具结果）
+    resp = await fetch(apiUrl, {
+      body: JSON.stringify({
+        messages: [...messages, ...toolMessages]
+      })
+    })
+  }
+  
+  // 8. 保存 AI 回复并返回
+  return c.json({ aiReply: { ... } })
+})
+```
+
+---
+
+### 2. `public/static/visitor-chat.js`
+
+**访客页面前端逻辑**
+
+#### 主要功能：
+
+```javascript
+// 全局变量
+let sessionId = null       // 当前会话 ID
+let lastTs = ''            // 最后消息时间戳
+let isWaiting = false      // 是否等待 AI 回复
+let currentAbortId = null  // 用于打断的请求 ID
+
+// 核心函数
+async function initSession()      // 初始化会话
+async function sendMessage()      // 发送消息
+function cancelWaiting()          // 打断重问
+function appendMessage(role, content, id)  // 渲染消息
+function startPolling()           // 轮询新消息
+function renderMd(text)           // 渲染 Markdown
+
+// 事件绑定（DOMContentLoaded）
+- textarea 自动调整高度
+- Enter 发送消息
+- Shift+Enter 换行
+```
+
+---
+
+### 3. `src/routes/visitor.ts`
+
+**访客页面路由**
+
+```typescript
+export const visitorRoutes = new Hono()
+
+// 主页
+visitorRoutes.get('/', (c) => {
+  return c.html(`
+    <h1>欢迎访问 my-agent</h1>
+    <a href="/u/jennia">示例：与 jennia 的 AI 助手对话</a>
+  `)
+})
+
+// 访客对话页面
+visitorRoutes.get('/u/:ownerId', async (c) => {
+  const owner = await getOwner(c.env.KV, ownerId)
+  if (!owner) return c.html('主人不存在', 404)
+  
+  return c.html(visitorChatPage(owner))  // 返回聊天页面 HTML
+})
+
+// visitorChatPage 函数生成完整 HTML
+function visitorChatPage(owner: any): string {
+  return `<!DOCTYPE html>
+    <html>
+      <head>
+        <title>和 ${owner.ai_name} 聊天 · ${owner.name}</title>
+        <script src="/static/visitor-chat.js"></script>
+      </head>
+      <body>...</body>
+    </html>
+  `
+}
+```
+
+---
+
+### 4. `src/routes/owner.ts`
+
+**主人后台路由**
+
+```typescript
+export const ownerRoutes = new Hono()
+
+ownerRoutes.get('/owner/login', (c) => c.html(loginPage()))
+ownerRoutes.get('/owner/dashboard', (c) => c.html(dashboardPage()))
+ownerRoutes.get('/owner/settings', (c) => c.html(settingsPage()))
+ownerRoutes.get('/owner/register', (c) => c.html(registerPage()))
+```
+
+---
+
+## 📄 配置文件说明
+
+### `wrangler.jsonc`
+
+Cloudflare Pages 配置文件：
+
+```jsonc
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "my-agent",
+  "compatibility_date": "2024-01-01",
+  "pages_build_output_dir": "./dist",
+  "compatibility_flags": ["nodejs_compat"]
+}
+```
+
+### `vite.config.ts`
+
+Vite 构建配置：
+
+```typescript
+import { defineConfig } from 'vite'
+import pages from '@hono/vite-cloudflare-pages'
+
+export default defineConfig({
+  plugins: [pages()],
+  build: {
+    outDir: 'dist'
+  }
+})
+```
+
+### `package.json`
+
+依赖和脚本：
+
+```json
+{
+  "scripts": {
+    "dev": "vite",
+    "dev:sandbox": "wrangler pages dev dist --ip 0.0.0.0 --port 3000",
+    "build": "vite build",
+    "deploy": "npm run build && wrangler pages deploy dist",
+    "test": "bash scripts/test-tools.sh"
+  },
+  "dependencies": {
+    "hono": "^4.0.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "4.20250705.0",
+    "@hono/vite-cloudflare-pages": "^0.4.2",
+    "vite": "^5.0.0",
+    "wrangler": "^3.78.0",
+    "typescript": "^5.0.0"
+  }
+}
+```
+
+### `ecosystem.config.cjs`
+
+PM2 配置（本地开发）：
+
+```javascript
+module.exports = {
+  apps: [
+    {
+      name: 'webapp',
+      script: 'npx',
+      args: 'wrangler pages dev dist --ip 0.0.0.0 --port 3000',
+      env: {
+        NODE_ENV: 'development',
+        PORT: 3000
+      }
+    }
+  ]
+}
+```
+
+---
+
+## 🚀 开发流程
+
+### 本地开发
+
+```bash
+# 1. 安装依赖
+npm install
+
+# 2. 配置环境变量（.dev.vars）
+OPENAI_API_KEY=your-key
+OPENAI_BASE_URL=https://llm.mcisaas.com
+
+# 3. 构建项目
+npm run build
+
+# 4. 启动开发服务器
+npm run dev:sandbox
+
+# 5. 访问
+http://localhost:3000/u/jennia
+```
+
+### 添加新工具
+
+```bash
+# 1. 编辑 src/routes/api.ts
+#    - 在 tools 数组添加定义
+#    - 在 executeToolCall 添加实现
+
+# 2. 构建并部署
+npm run build
+npm run deploy
+
+# 3. 测试
+bash scripts/test-tools.sh
+```
+
+---
+
+## 📚 相关文档
+
+- **README.md**: 项目总览和快速开始
+- **docs/function-calling-explained.md**: 工具调用原理深度解析
+- **docs/tool-examples.js**: 工具添加示例代码
+- **docs/TOOL_IMPLEMENTATION_SUMMARY.md**: 工具实现总结
+
+---
+
+**文档版本**: v1.0  
+**作者**: Jennia  
+**最后更新**: 2026-04-09
