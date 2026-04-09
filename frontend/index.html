@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>my-agent - 个人 AI 助手平台</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white min-h-screen flex items-center justify-center p-4">
+  
+  <div class="max-w-2xl w-full">
+    <div class="text-center mb-12">
+      <h1 class="text-5xl font-bold mb-4 bg-gradient-to-r from-blue-400 to-purple-600 bg-clip-text text-transparent">
+        my-agent
+      </h1>
+      <p class="text-gray-400 text-lg">个人 AI 助手平台 · Python 版本</p>
+    </div>
+
+    <div class="bg-gray-800/50 backdrop-blur rounded-2xl p-8 shadow-2xl border border-gray-700">
+      <h2 class="text-2xl font-semibold mb-6 flex items-center gap-2">
+        <i class="fas fa-rocket text-blue-500"></i>
+        快速开始
+      </h2>
+      
+      <div class="space-y-4">
+        <a href="/u/jennia" 
+           class="block bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-xl px-6 py-4 transition transform hover:scale-[1.02] shadow-lg">
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="font-semibold text-lg">💬 与 Jennia 的 AI 助手对话</div>
+              <div class="text-sm text-blue-100 mt-1">体验 OpenAI Function Calling 工具调用</div>
+            </div>
+            <i class="fas fa-arrow-right text-2xl"></i>
+          </div>
+        </a>
+        
+        <a href="/owner/login" 
+           class="block bg-gray-700 hover:bg-gray-600 text-white rounded-xl px-6 py-4 transition transform hover:scale-[1.02]">
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="font-semibold text-lg">👤 主人后台管理</div>
+              <div class="text-sm text-gray-400 mt-1">查看会话、人工接管、配置 AI 人格</div>
+            </div>
+            <i class="fas fa-arrow-right text-2xl"></i>
+          </div>
+        </a>
+      </div>
+    </div>
+
+    <div class="mt-8 bg-gray-800/30 backdrop-blur rounded-xl p-6 border border-gray-700/50">
+      <h3 class="font-semibold mb-4 flex items-center gap-2">
+        <i class="fas fa-info-circle text-purple-500"></i>
+        核心特性
+      </h3>
+      <ul class="space-y-2 text-sm text-gray-400">
+        <li class="flex items-start gap-2">
+          <i class="fas fa-check text-green-500 mt-0.5"></i>
+          <span><strong class="text-white">OpenAI Function Calling</strong> - 支持工具调用（时间查询、信息搜索）</span>
+        </li>
+        <li class="flex items-start gap-2">
+          <i class="fas fa-check text-green-500 mt-0.5"></i>
+          <span><strong class="text-white">Flask + SQLite</strong> - 轻量级 Python 后端，易于部署</span>
+        </li>
+        <li class="flex items-start gap-2">
+          <i class="fas fa-check text-green-500 mt-0.5"></i>
+          <span><strong class="text-white">工具自动加载</strong> - 添加新工具只需放入 tools/ 目录</span>
+        </li>
+        <li class="flex items-start gap-2">
+          <i class="fas fa-check text-green-500 mt-0.5"></i>
+          <span><strong class="text-white">人工接管</strong> - 主人可随时查看会话并回复访客</span>
+        </li>
+      </ul>
+    </div>
+
+    <div class="mt-6 text-center text-sm text-gray-500">
+      <p>
+        <a href="https://github.com/Jenniahu/my-agent" target="_blank" class="text-blue-400 hover:text-blue-300 transition">
+          <i class="fab fa-github mr-1"></i>
+          GitHub
+        </a>
+        ·
+        <a href="/api/ping" target="_blank" class="text-blue-400 hover:text-blue-300 transition">
+          <i class="fas fa-heartbeat mr-1"></i>
+          API 状态
+        </a>
+        ·
+        <span>v2.0.0 Python 版本</span>
+      </p>
+    </div>
+  </div>
+
+</body>
+</html>

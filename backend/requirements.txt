@@ -1,0 +1,19 @@
+# Flask 核心
+Flask==3.0.0
+flask-cors==4.0.0
+flask-sqlalchemy==3.1.1
+
+# 数据库
+SQLAlchemy==2.0.23
+
+# 密码哈希
+werkzeug==3.0.1
+
+# HTTP 请求
+requests==2.31.0
+
+# 环境变量
+python-dotenv==1.0.0
+
+# 日期处理
+python-dateutil==2.8.2

@@ -31,3 +31,26 @@ lerna-debug.log*
 
 # misc
 .DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+myagent.db
+
+# Backup
+*.backup
+*.bak
+*.tar.gz
+*.zip
