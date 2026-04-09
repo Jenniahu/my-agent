@@ -8,6 +8,81 @@ type Bindings = {
   OPENAI_BASE_URL: string
 }
 
+// ─── 工具定义 ─────────────────────────────────
+// 这里定义 AI 可以调用的工具
+const tools = [
+  {
+    type: 'function',
+    function: {
+      name: 'get_current_time',
+      description: '获取当前时间（北京时间）',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'search_owner_info',
+      description: '搜索主人的专业技能、项目经验或服务信息',
+      parameters: {
+        type: 'object',
+        properties: {
+          keyword: {
+            type: 'string',
+            description: '搜索关键词，如 "RAG"、"workflow"、"AI应用"'
+          }
+        },
+        required: ['keyword']
+      }
+    }
+  }
+]
+
+// ─── 工具执行函数 ─────────────────────────────
+// 当 OpenAI 返回 tool_call 时，这里负责实际执行
+async function executeToolCall(
+  name: string,
+  args: any,
+  owner: Owner
+): Promise<string> {
+  switch (name) {
+    case 'get_current_time':
+      // 示例：返回当前北京时间
+      const now = new Date()
+      const beijingTime = new Date(now.getTime() + 8 * 60 * 60 * 1000)
+      return JSON.stringify({
+        time: beijingTime.toISOString().replace('T', ' ').substring(0, 19),
+        timezone: 'Asia/Shanghai'
+      })
+
+    case 'search_owner_info':
+      // 示例：搜索主人的信息（实际应查询数据库）
+      const keyword = args.keyword?.toLowerCase() || ''
+      const mockProjects = [
+        { name: '客服知识库系统', type: 'RAG', year: 2024, tech: ['Dify', 'Cloudflare D1'] },
+        { name: '审批自动化流程', type: 'workflow', year: 2024, tech: ['n8n', 'API集成'] },
+        { name: 'AI原生应用开发', type: 'ai_native', year: 2024, tech: ['Hono', 'OpenAI'] }
+      ]
+      const filtered = mockProjects.filter(p => 
+        p.name.toLowerCase().includes(keyword) || 
+        p.type.toLowerCase().includes(keyword)
+      )
+      return JSON.stringify({
+        owner_name: owner.name,
+        keyword: args.keyword,
+        projects: filtered,
+        bio: owner.bio
+      })
+
+    default:
+      return JSON.stringify({ error: `Unknown tool: ${name}` })
+  }
+}
+
 export const apiRoutes = new Hono<{ Bindings: Bindings }>()
 
 // ─── 类型定义 ─────────────────────────────────
@@ -180,7 +255,7 @@ apiRoutes.post('/sessions/:sessionId/chat', async (c) => {
     }))
   ]
 
-  // 调用 OpenAI
+  // 调用 OpenAI with Function Calling 支持
   let aiContent = '你好！有什么可以帮你的吗？'
   try {
     // 智能处理 URL：如果已经包含 /chat/completions 就直接用，否则拼接
@@ -190,7 +265,9 @@ apiRoutes.post('/sessions/:sessionId/chat', async (c) => {
       : `${rawUrl}/v1/chat/completions`
 
     console.log('[AI] calling:', apiUrl)
-    const resp = await fetch(apiUrl, {
+    
+    // 第一次调用：传入工具列表
+    let resp = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${c.env.OPENAI_API_KEY}`,
@@ -199,13 +276,77 @@ apiRoutes.post('/sessions/:sessionId/chat', async (c) => {
       body: JSON.stringify({
         model: 'MiniMax-M2.5',
         messages,
-        max_tokens: 1500,  // 增加输出长度上限，支持详细回复
+        max_tokens: 1500,
         temperature: 0.7,
+        tools,  // 传入工具定义
+        tool_choice: 'auto'  // 让模型自动决定是否调用工具
       }),
     })
+    
     if (resp.ok) {
       const data = await resp.json() as any
-      aiContent = data.choices?.[0]?.message?.content || aiContent
+      const choice = data.choices?.[0]
+      const message = choice?.message
+      
+      // 检查是否需要调用工具
+      if (message?.tool_calls && message.tool_calls.length > 0) {
+        console.log('[AI] Tool calls requested:', message.tool_calls.length)
+        
+        // 收集工具调用结果
+        const toolMessages = []
+        for (const toolCall of message.tool_calls) {
+          const funcName = toolCall.function.name
+          const funcArgs = JSON.parse(toolCall.function.arguments)
+          
+          console.log(`[AI] Executing tool: ${funcName}`, funcArgs)
+          
+          // 执行工具
+          const result = await executeToolCall(funcName, funcArgs, owner)
+          
+          toolMessages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            name: funcName,
+            content: result
+          })
+        }
+        
+        // 构建新的消息列表（原消息 + 模型工具调用 + 工具结果）
+        const messagesWithTools = [
+          ...messages,
+          {
+            role: 'assistant',
+            content: message.content || null,
+            tool_calls: message.tool_calls
+          },
+          ...toolMessages
+        ]
+        
+        // 第二次调用：传入工具结果，让模型生成最终回复
+        resp = await fetch(apiUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${c.env.OPENAI_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'MiniMax-M2.5',
+            messages: messagesWithTools,
+            max_tokens: 1500,
+            temperature: 0.7,
+          }),
+        })
+        
+        if (resp.ok) {
+          const finalData = await resp.json() as any
+          aiContent = finalData.choices?.[0]?.message?.content || aiContent
+          console.log('[AI] Final response with tools:', aiContent.substring(0, 100))
+        }
+      } else {
+        // 无需调用工具，直接使用模型回复
+        aiContent = message?.content || aiContent
+        console.log('[AI] Direct response (no tools):', aiContent.substring(0, 100))
+      }
     } else {
       const errText = await resp.text()
       console.error('[AI] API error:', resp.status, errText)
