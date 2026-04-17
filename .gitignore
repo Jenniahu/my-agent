@@ -32,6 +32,9 @@ lerna-debug.log*
 # misc
 .DS_Store
 
+# Git worktrees
+.worktrees/
+
 # Python
 __pycache__/
 *.py[cod]
