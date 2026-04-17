@@ -5,6 +5,7 @@ import requests
 import json
 from config import Config
 from services.tool_service import ToolService
+from models import RequirementConfig
 
 
 class AIService:
@@ -107,10 +108,18 @@ class AIService:
     
     def _build_messages(self, owner, history, new_message):
         """构建 OpenAI 消息格式"""
+        # 构建基础系统提示词
+        system_content = owner.ai_persona or f'你是 {owner.name} 的 AI 分身，友好、专业地回答访客的问题。'
+        
+        # 检查并注入需求收集策略
+        strategy_prompt = self._get_requirement_strategy(owner.id)
+        if strategy_prompt:
+            system_content += f"\n\n{strategy_prompt}"
+        
         messages = [
             {
                 'role': 'system',
-                'content': owner.ai_persona or f'你是 {owner.name} 的 AI 分身，友好、专业地回答访客的问题。'
+                'content': system_content
             }
         ]
         
@@ -129,6 +138,34 @@ class AIService:
         })
         
         return messages
+    
+    def _get_requirement_strategy(self, owner_id: str) -> str:
+        """
+        获取需求收集策略提示词
+        
+        Args:
+            owner_id: 主人ID
+        
+        Returns:
+            str: 策略提示词，如果未启用则返回空字符串
+        """
+        try:
+            config = RequirementConfig.query.get(owner_id)
+            
+            # 如果配置不存在，创建默认配置（禁用状态）
+            if not config:
+                return ''
+            
+            # 如果未启用，返回空字符串
+            if not config.enabled:
+                return ''
+            
+            # 返回策略提示词
+            return config.strategy_prompt or ''
+        
+        except Exception as e:
+            print(f"[AI] 获取需求策略时出错: {str(e)}")
+            return ''
     
     def _call_openai(self, messages, tools=None):
         """

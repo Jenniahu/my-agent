@@ -49,15 +49,11 @@ def chat(session_id):
         
         print(f"✅ 保存访客消息: {visitor_msg.id}")
         
-        # 3. 检查主人是否在线
+        # 3. 检查主人是否在线（仅用于显示状态，不阻塞 AI 回复）
         online_status = OnlineStatus.query.get(session.owner_id)
-        if online_status and online_status.is_online:
-            print(f"👤 主人在线，等待人工回复")
-            return jsonify({
-                'visitorMessageId': visitor_msg.id,
-                'aiReply': None,
-                'ownerOnline': True
-            })
+        owner_online = online_status.is_online if online_status else False
+        if owner_online:
+            print(f"👤 主人在线，同时让 AI 参与回复")
         
         # 4. 获取历史消息（最近 40 条）
         history = Message.query.filter_by(session_id=session_id)\
@@ -96,7 +92,7 @@ def chat(session_id):
                 'id': ai_msg.id,
                 'content': ai_content
             },
-            'ownerOnline': False
+            'ownerOnline': owner_online
         })
     
     except Exception as e:

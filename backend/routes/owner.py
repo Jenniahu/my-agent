@@ -3,7 +3,7 @@
 """
 from flask import Blueprint, request, jsonify
 from datetime import datetime
-from models import db, Owner, Session, Message, Token, OnlineStatus
+from models import db, Owner, Session, Message, Token, OnlineStatus, Requirement, RequirementConfig
 from utils.helpers import generate_id, generate_token, hash_password, verify_password, get_token_expiry
 
 owner_bp = Blueprint('owner', __name__)
@@ -283,3 +283,198 @@ def heartbeat():
         db.session.rollback()
         print(f"❌ 心跳失败: {str(e)}")
         return jsonify({'error': 'Heartbeat failed'}), 500
+
+
+# ============ 需求收集配置管理 ============
+
+DEFAULT_STRATEGY_PROMPT = '''当访客提到想要某个功能或提出改进建议时，请主动询问以下信息：
+
+1. **功能描述**：请访客具体描述想要的功能是什么
+2. **使用场景**：请访客说明这个功能会在什么情况下使用，解决什么问题
+3. **优先级**：询问访客认为这个功能的重要程度（高/中/低）
+
+收集到完整信息后，使用 save_requirement 工具保存需求。'''
+
+DEFAULT_FIELDS_SCHEMA = '{"fields": ["feature_desc", "use_case", "priority"]}'
+
+
+def get_current_owner():
+    """获取当前登录的主人"""
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    token_obj = Token.query.get(token)
+    if not token_obj or token_obj.expires_at < datetime.utcnow():
+        return None
+    return token_obj.owner
+
+
+@owner_bp.route('/api/owner/requirement-config', methods=['GET'])
+def get_requirement_config():
+    """获取需求收集配置"""
+    try:
+        owner = get_current_owner()
+        if not owner:
+            return jsonify({'error': 'Unauthorized'}), 401
+        
+        config = RequirementConfig.query.get(owner.id)
+        
+        # 如果配置不存在，创建默认配置
+        if not config:
+            config = RequirementConfig(
+                owner_id=owner.id,
+                enabled=False,
+                strategy_prompt=DEFAULT_STRATEGY_PROMPT,
+                fields_schema=DEFAULT_FIELDS_SCHEMA
+            )
+            db.session.add(config)
+            db.session.commit()
+        
+        return jsonify(config.to_dict())
+    
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ 获取需求配置失败: {str(e)}")
+        return jsonify({'error': 'Failed to get requirement config'}), 500
+
+
+@owner_bp.route('/api/owner/requirement-config', methods=['PUT'])
+def update_requirement_config():
+    """更新需求收集配置"""
+    try:
+        owner = get_current_owner()
+        if not owner:
+            return jsonify({'error': 'Unauthorized'}), 401
+        
+        data = request.json
+        config = RequirementConfig.query.get(owner.id)
+        
+        # 如果配置不存在，创建新配置
+        if not config:
+            config = RequirementConfig(
+                owner_id=owner.id,
+                enabled=data.get('enabled', False),
+                strategy_prompt=data.get('strategy_prompt', DEFAULT_STRATEGY_PROMPT),
+                fields_schema=data.get('fields_schema', DEFAULT_FIELDS_SCHEMA)
+            )
+            db.session.add(config)
+        else:
+            # 更新配置
+            if 'enabled' in data:
+                config.enabled = data['enabled']
+            if 'strategy_prompt' in data:
+                config.strategy_prompt = data['strategy_prompt']
+            if 'fields_schema' in data:
+                config.fields_schema = data['fields_schema']
+            config.updated_at = datetime.utcnow()
+        
+        db.session.commit()
+        
+        print(f"✅ 更新需求配置: {owner.id}, enabled={config.enabled}")
+        
+        return jsonify(config.to_dict())
+    
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ 更新需求配置失败: {str(e)}")
+        return jsonify({'error': 'Failed to update requirement config'}), 500
+
+
+# ============ 需求管理 ============
+
+@owner_bp.route('/api/owner/requirements', methods=['GET'])
+def get_requirements():
+    """获取需求列表"""
+    try:
+        owner = get_current_owner()
+        if not owner:
+            return jsonify({'error': 'Unauthorized'}), 401
+        
+        # 获取筛选参数
+        status = request.args.get('status')
+        priority = request.args.get('priority')
+        
+        # 构建查询
+        query = Requirement.query.filter_by(owner_id=owner.id)
+        
+        if status:
+            query = query.filter_by(status=status)
+        if priority:
+            query = query.filter_by(priority=priority)
+        
+        # 按 mention_count 降序排序（热门需求在前）
+        requirements = query.order_by(Requirement.mention_count.desc()).all()
+        
+        return jsonify({
+            'requirements': [req.to_dict() for req in requirements]
+        })
+    
+    except Exception as e:
+        print(f"❌ 获取需求列表失败: {str(e)}")
+        return jsonify({'error': 'Failed to get requirements'}), 500
+
+
+@owner_bp.route('/api/owner/requirements/<requirement_id>', methods=['PUT'])
+def update_requirement(requirement_id):
+    """更新需求状态"""
+    try:
+        owner = get_current_owner()
+        if not owner:
+            return jsonify({'error': 'Unauthorized'}), 401
+        
+        # 查找需求
+        requirement = Requirement.query.get(requirement_id)
+        if not requirement or requirement.owner_id != owner.id:
+            return jsonify({'error': 'Requirement not found'}), 404
+        
+        data = request.json
+        
+        # 更新允许的字段
+        if 'status' in data:
+            if data['status'] in ['pending', 'approved', 'rejected', 'implemented']:
+                requirement.status = data['status']
+        if 'priority' in data:
+            if data['priority'] in ['low', 'medium', 'high']:
+                requirement.priority = data['priority']
+        if 'feature_desc' in data:
+            requirement.feature_desc = data['feature_desc']
+        if 'use_case' in data:
+            requirement.use_case = data['use_case']
+        
+        requirement.updated_at = datetime.utcnow()
+        db.session.commit()
+        
+        print(f"✅ 更新需求: {requirement_id}, status={requirement.status}")
+        
+        return jsonify(requirement.to_dict())
+    
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ 更新需求失败: {str(e)}")
+        return jsonify({'error': 'Failed to update requirement'}), 500
+
+
+@owner_bp.route('/api/owner/sessions/<session_id>/requirements', methods=['GET'])
+def get_session_requirements(session_id):
+    """获取指定会话的需求列表"""
+    try:
+        owner = get_current_owner()
+        if not owner:
+            return jsonify({'error': 'Unauthorized'}), 401
+        
+        # 验证会话归属
+        session = Session.query.get(session_id)
+        if not session or session.owner_id != owner.id:
+            return jsonify({'error': 'Session not found'}), 404
+        
+        # 获取该会话的所有需求
+        requirements = Requirement.query.filter_by(
+            owner_id=owner.id,
+            session_id=session_id
+        ).order_by(Requirement.created_at.desc()).all()
+        
+        return jsonify({
+            'requirements': [req.to_dict() for req in requirements]
+        })
+    
+    except Exception as e:
+        print(f"❌ 获取会话需求失败: {str(e)}")
+        return jsonify({'error': 'Failed to get session requirements'}), 500

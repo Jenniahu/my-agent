@@ -6,8 +6,10 @@
 
 ### ✅ 已完成
 - ✨ **访客对话**：支持 Markdown 渲染 + 打断重问功能
-- 🤖 **AI 工具调用**：集成 OpenAI Function Calling（时间查询、主人信息搜索）
-- 👤 **主人后台**：实时会话列表、消息查看、人工接管
+- 👤 **访客用户系统**：邮箱注册/登录，一个用户可拥有多个会话，支持查看历史会话和删除会话
+- 🤖 **AI 工具调用**：集成 OpenAI Function Calling（时间查询、主人信息搜索、待办、网页搜索等）
+- 📋 **需求收集系统**：AI 主动引导访客完善需求，结构化存储，支持需求看板管理
+- 👤 **主人后台**：实时会话列表、消息查看、人工接管、需求看板
 - 💾 **数据存储**：基于 SQLite 的关系型数据库（可迁移到 MySQL）
 - 📝 **上下文管理**：保留最近 40 条对话记录
 - 🎨 **UI 优化**：Tailwind CSS + FontAwesome 图标
@@ -75,14 +77,20 @@ my-agent/
 │   ├── routes/                   # API 路由
 │   │   ├── session.py            # 会话管理
 │   │   ├── message.py            # 消息管理
-│   │   └── owner.py              # 主人管理
+│   │   ├── owner.py              # 主人管理
+│   │   └── visitor.py            # 访客用户管理
 │   ├── services/                 # 业务逻辑
 │   │   ├── ai_service.py         # AI 调用
 │   │   └── tool_service.py       # 工具管理
 │   ├── tools/                    # 工具实现
 │   │   ├── base.py               # 工具基类
 │   │   ├── time_tool.py          # 时间查询
-│   │   └── search_tool.py        # 信息搜索
+│   │   ├── search_tool.py        # 信息搜索
+│   │   ├── calculator_tool.py    # 计算器
+│   │   ├── todo_tool.py          # 待办事项
+│   │   ├── notification_tool.py  # 通知
+│   │   ├── web_search_tool.py    # 网页搜索
+│   │   └── requirement_tool.py   # 需求收集
 │   └── utils/                    # 工具函数
 │       └── helpers.py            # 辅助函数
 │
@@ -114,9 +122,17 @@ my-agent/
 # 获取主人信息
 GET /api/profile/<owner_id>
 
-# 创建会话
+# 访客注册
+POST /api/visitor/register
+Body: {"email": "user@example.com", "password": "123456", "name": "访客"}
+
+# 访客登录
+POST /api/visitor/login
+Body: {"email": "user@example.com", "password": "123456"}
+
+# 创建会话（可选传入 visitorToken 关联用户）
 POST /api/sessions
-Body: {"ownerId": "jennia", "visitorName": "访客"}
+Body: {"ownerId": "jennia", "visitorName": "访客", "visitorToken": "xxx"}
 
 # 发送消息并获取 AI 回复
 POST /api/sessions/<id>/chat
@@ -124,6 +140,14 @@ Body: {"content": "现在几点了？"}
 
 # 获取消息列表
 GET /api/sessions/<id>/messages?since=2026-04-09T00:00:00Z
+
+# 获取访客的所有会话
+GET /api/visitor/sessions
+Header: Authorization: Bearer <visitor_token>
+
+# 删除访客的会话
+DELETE /api/visitor/sessions/<id>
+Header: Authorization: Bearer <visitor_token>
 ```
 
 ### 主人端 API
@@ -196,8 +220,12 @@ class XxxTool(BaseTool):
 - ai_name, ai_persona
 - email, password_hash
 
+### Visitor（访客用户）
+- id, email, password_hash, name
+- created_at
+
 ### Session（会话）
-- id, owner_id, visitor_name
+- id, owner_id, visitor_id (关联 Visitor), visitor_name
 - status (active/taken_over/closed)
 
 ### Message（消息）
@@ -209,6 +237,13 @@ class XxxTool(BaseTool):
 
 ### OnlineStatus（在线状态）
 - owner_id, is_online, last_heartbeat
+
+### RequirementConfig（需求收集配置）
+- owner_id, enabled, strategy_prompt, fields_schema
+
+### Requirement（需求记录）
+- id, owner_id, session_id, message_id
+- feature_desc, use_case, priority, status, mention_count
 
 ---
 
@@ -267,6 +302,22 @@ gunicorn -w 4 -b 0.0.0.0:5000 app:app
 ---
 
 ## 📝 变更日志
+
+### v2.2.0 (2026-04-17) - 访客用户系统
+
+**新增功能**：
+- ✅ 访客注册/登录：邮箱密码注册，支持昵称
+- ✅ 会话关联：登录后创建的会话自动关联到访客账号
+- ✅ 历史会话：访客可查看与所有主人的对话记录
+- ✅ 会话管理：支持删除历史会话
+
+### v2.1.0 (2026-04-17) - 需求收集系统
+
+**新增功能**：
+- ✅ 需求收集系统：AI 主动引导访客完善需求
+- ✅ 需求看板：主人后台可查看、筛选、管理需求
+- ✅ 需求配置：支持自定义策略提示和开关控制
+- ✅ 新增工具：todo、notification、web_search、requirement
 
 ### v2.0.0 (2026-04-09) - Python 版本
 

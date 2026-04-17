@@ -5,5 +5,6 @@
 from tools.base import BaseTool
 from tools.time_tool import TimeTool
 from tools.search_tool import SearchTool
+from tools.requirement_tool import RequirementTool
 
-__all__ = ['BaseTool', 'TimeTool', 'SearchTool']
+__all__ = ['BaseTool', 'TimeTool', 'SearchTool', 'RequirementTool']

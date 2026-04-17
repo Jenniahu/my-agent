@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Flask 主应用入口
 """
@@ -5,7 +6,7 @@ from flask import Flask, jsonify, send_from_directory, render_template_string
 from flask_cors import CORS
 from config import Config
 from models import db, Owner, OnlineStatus
-from routes import session_bp, message_bp, owner_bp
+from routes import session_bp, message_bp, owner_bp, visitor_bp
 from utils.helpers import hash_password
 import os
 
@@ -39,7 +40,7 @@ def visitor_chat(owner_id):
     """访客对话页面"""
     owner = Owner.query.get(owner_id)
     if not owner:
-        return f"<h1>主人不存在</h1><p>ID: {owner_id}</p>", 404
+        return "<h1>主人不存在</h1><p>ID: %s</p>" % owner_id, 404
     
     # 检查在线状态
     online_status = OnlineStatus.query.get(owner_id)
@@ -58,12 +59,10 @@ def visitor_chat_page(owner, is_online=False):
     safe_avatar = owner.avatar or owner.name[0] if owner.name else "A"
     safe_bio = owner.bio or ""
     
-    ai_greeting = (
-        f"你好！我是 {safe_ai_name}，{safe_name} 的 AI 分身。<br>"
-        f'<span class="text-gray-400 text-xs">{safe_bio}</span>'
-    ) if safe_bio else (
-        f"你好！我是 {safe_ai_name}，{safe_name} 的 AI 分身。有什么我可以帮你的吗？"
-    )
+    if safe_bio:
+        ai_greeting = "你好！我是 %s，%s 的 AI 分身。<br><span class=\"text-gray-400 text-xs\">%s</span>" % (safe_ai_name, safe_name, safe_bio)
+    else:
+        ai_greeting = "你好！我是 %s，%s 的 AI 分身。有什么我可以帮你的吗？" % (safe_ai_name, safe_name)
     
     return f'''<!DOCTYPE html>
 <html lang="zh-CN">
@@ -77,12 +76,12 @@ def visitor_chat_page(owner, is_online=False):
   <style>
     * {{ box-sizing: border-box; }}
     body {{ background: #0f0f0f; }}
-    .chat-container {{ height: calc(100vh - 0px); max-width: 780px; margin: 0 auto; }}
+    .chat-container {{ height: calc(100vh - 0px); width: 100%; margin: 0 auto; }}
     .messages-area {{ height: calc(100% - 140px); overflow-y: auto; scroll-behavior: smooth; }}
     .messages-area::-webkit-scrollbar {{ width: 4px; }}
     .messages-area::-webkit-scrollbar-track {{ background: transparent; }}
     .messages-area::-webkit-scrollbar-thumb {{ background: #333; border-radius: 2px; }}
-    .msg-bubble {{ max-width: 72%; word-break: break-word; }}
+    .msg-bubble {{ max-width: min(75%, 600px); word-wrap: break-word; overflow-wrap: break-word; }}
     .md-content p {{ margin-bottom: 0.5em; }}
     .md-content p:last-child {{ margin-bottom: 0; }}
     .md-content ul, .md-content ol {{ padding-left: 1.4em; margin-bottom: 0.5em; }}
@@ -115,11 +114,28 @@ def visitor_chat_page(owner, is_online=False):
     <div class="flex-1">
       <div class="font-semibold text-white flex items-center gap-2">
         <span id="chatTitle">和 {safe_ai_name} 聊天</span>
-        <span id="ownerOnlineBadge" class="{''}hidden text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full border border-green-500/30">
+        <span id="ownerOnlineBadge" class="hidden text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full border border-green-500/30">
           <i class="fas fa-circle text-xs mr-1"></i>本人在线
         </span>
       </div>
       <div class="text-xs text-gray-400">{safe_name} 可查看该对话，也可能用 {safe_ai_name} 回复你</div>
+    </div>
+    <!-- 访客用户操作区 -->
+    <div class="flex items-center gap-2">
+      <div id="visitorAuthSection">
+        <button onclick="showAuthModal()" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg transition">
+          <i class="fas fa-user mr-1"></i>登录
+        </button>
+      </div>
+      <div id="visitorUserSection" class="hidden items-center gap-2">
+        <button onclick="showSessionsModal()" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg transition">
+          <i class="fas fa-history mr-1"></i>历史会话
+        </button>
+        <span id="visitorDisplayName" class="text-xs text-gray-400 max-w-[80px] truncate"></span>
+        <button onclick="visitorLogout()" class="text-xs text-gray-500 hover:text-gray-300 px-2 py-1">
+          <i class="fas fa-sign-out-alt"></i>
+        </button>
+      </div>
     </div>
   </div>
 
@@ -171,6 +187,78 @@ def visitor_chat_page(owner, is_online=False):
 
 </div>
 
+<!-- 登录/注册弹窗 -->
+<div id="authModal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+  <div class="bg-gray-900 rounded-2xl max-w-md w-full border border-gray-800 shadow-2xl relative">
+    <div class="flex border-b border-gray-800">
+      <button id="loginTab" onclick="switchAuthTab('login')" class="flex-1 py-3 text-sm font-medium text-blue-400 border-b-2 border-blue-400 transition">
+        登录
+      </button>
+      <button id="registerTab" onclick="switchAuthTab('register')" class="flex-1 py-3 text-sm font-medium text-gray-400 transition">
+        注册
+      </button>
+    </div>
+    <div class="p-6">
+      <!-- 登录表单 -->
+      <div id="loginForm">
+        <div class="space-y-4">
+          <div>
+            <label class="block text-xs text-gray-400 mb-1">邮箱</label>
+            <input type="email" id="loginEmail" class="w-full bg-gray-800 text-white text-sm rounded-lg px-3 py-2 outline-none border border-gray-700 focus:border-blue-500 transition" placeholder="your@email.com">
+          </div>
+          <div>
+            <label class="block text-xs text-gray-400 mb-1">密码</label>
+            <input type="password" id="loginPassword" class="w-full bg-gray-800 text-white text-sm rounded-lg px-3 py-2 outline-none border border-gray-700 focus:border-blue-500 transition" placeholder="••••••••">
+          </div>
+          <div id="loginError" class="text-red-400 text-xs"></div>
+          <button onclick="visitorLogin()" class="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-2.5 text-sm font-medium transition">
+            登录
+          </button>
+        </div>
+      </div>
+      <!-- 注册表单 -->
+      <div id="registerForm" class="hidden">
+        <div class="space-y-4">
+          <div>
+            <label class="block text-xs text-gray-400 mb-1">邮箱</label>
+            <input type="email" id="registerEmail" class="w-full bg-gray-800 text-white text-sm rounded-lg px-3 py-2 outline-none border border-gray-700 focus:border-blue-500 transition" placeholder="your@email.com">
+          </div>
+          <div>
+            <label class="block text-xs text-gray-400 mb-1">密码</label>
+            <input type="password" id="registerPassword" class="w-full bg-gray-800 text-white text-sm rounded-lg px-3 py-2 outline-none border border-gray-700 focus:border-blue-500 transition" placeholder="••••••••">
+          </div>
+          <div>
+            <label class="block text-xs text-gray-400 mb-1">昵称（可选）</label>
+            <input type="text" id="registerName" class="w-full bg-gray-800 text-white text-sm rounded-lg px-3 py-2 outline-none border border-gray-700 focus:border-blue-500 transition" placeholder="怎么称呼你">
+          </div>
+          <div id="registerError" class="text-red-400 text-xs"></div>
+          <button onclick="visitorRegister()" class="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-2.5 text-sm font-medium transition">
+            注册
+          </button>
+        </div>
+      </div>
+    </div>
+    <button onclick="hideAuthModal()" class="absolute top-4 right-4 text-gray-500 hover:text-gray-300">
+      <i class="fas fa-times"></i>
+    </button>
+  </div>
+</div>
+
+<!-- 会话历史弹窗 -->
+<div id="sessionsModal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+  <div class="bg-gray-900 rounded-2xl max-w-lg w-full border border-gray-800 shadow-2xl max-h-[80vh] flex flex-col">
+    <div class="flex items-center justify-between p-4 border-b border-gray-800">
+      <h3 class="text-lg font-semibold text-white">历史会话</h3>
+      <button onclick="hideSessionsModal()" class="text-gray-500 hover:text-gray-300">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+    <div id="sessionsList" class="p-4 overflow-y-auto flex-1">
+      <!-- 会话列表将在这里渲染 -->
+    </div>
+  </div>
+</div>
+
 <script>
 window.OWNER_ID = '{safe_id}'
 window.AI_NAME = '{safe_ai_name}'
@@ -182,7 +270,7 @@ window.AI_NAME = '{safe_ai_name}'
 
 @app.route('/owner/login')
 def owner_login_page():
-    """主人登录页面（简化版）"""
+    """主人登录页面"""
     return '''<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -190,6 +278,7 @@ def owner_login_page():
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>主人登录 - my-agent</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
 </head>
 <body class="bg-gray-900 text-white min-h-screen flex items-center justify-center p-4">
   <div class="max-w-md w-full">
@@ -199,25 +288,88 @@ def owner_login_page():
     </div>
     
     <div class="bg-gray-800 rounded-xl p-6 shadow-xl">
-      <div class="mb-6">
-        <p class="text-sm text-gray-400 mb-4">
-          此页面为简化版，完整主人后台功能请参考文档或使用 API。
-        </p>
-        
-        <div class="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
-          <h3 class="font-semibold mb-2 text-blue-400">默认测试账号</h3>
-          <p class="text-sm text-gray-300 mb-1">邮箱: <code class="bg-gray-700 px-2 py-1 rounded">jennia@example.com</code></p>
-          <p class="text-sm text-gray-300">密码: <code class="bg-gray-700 px-2 py-1 rounded">password123</code></p>
+      <form id="loginForm" class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-1">邮箱</label>
+          <input type="email" id="email" 
+            class="w-full bg-gray-700 text-white rounded-lg px-4 py-2 outline-none border border-gray-600 focus:border-blue-500 transition"
+            placeholder="your@email.com" required>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-1">密码</label>
+          <input type="password" id="password" 
+            class="w-full bg-gray-700 text-white rounded-lg px-4 py-2 outline-none border border-gray-600 focus:border-blue-500 transition"
+            placeholder="••••••••" required>
+        </div>
+        <div id="errorMsg" class="text-red-400 text-sm hidden"></div>
+        <button type="submit" id="loginBtn"
+          class="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-6 py-3 transition flex items-center justify-center gap-2">
+          <i class="fas fa-sign-in-alt"></i>
+          <span>登录</span>
+        </button>
+      </form>
+      
+      <div class="mt-6 pt-4 border-t border-gray-700">
+        <div class="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
+          <p class="text-xs text-gray-400">默认测试账号</p>
+          <p class="text-sm text-gray-300">邮箱: jennia@example.com</p>
+          <p class="text-sm text-gray-300">密码: password123</p>
         </div>
       </div>
-      
-      <a href="/" class="block bg-blue-600 hover:bg-blue-700 text-center text-white rounded-xl px-6 py-3 transition">
-        返回首页
+    </div>
+    
+    <div class="text-center mt-6">
+      <a href="/" class="text-gray-400 hover:text-white transition text-sm">
+        <i class="fas fa-arrow-left mr-1"></i>返回首页
       </a>
     </div>
   </div>
+
+  <script>
+  document.getElementById("loginForm").addEventListener("submit", async function(e) {
+    e.preventDefault();
+    const email = document.getElementById("email").value;
+    const password = document.getElementById("password").value;
+    const errorMsg = document.getElementById("errorMsg");
+    const loginBtn = document.getElementById("loginBtn");
+    
+    loginBtn.disabled = true;
+    loginBtn.innerHTML = \'<i class="fas fa-spinner fa-spin"></i><span>登录中...</span>\';
+    
+    try {
+      const res = await fetch("/api/owner/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await res.json();
+      
+      if (data.token) {
+        localStorage.setItem("owner_token", data.token);
+        window.location.href = "/owner/dashboard";
+      } else {
+        errorMsg.textContent = data.error || "登录失败";
+        errorMsg.classList.remove("hidden");
+      }
+    } catch (err) {
+      errorMsg.textContent = "网络错误，请重试";
+      errorMsg.classList.remove("hidden");
+    }
+    
+    loginBtn.disabled = false;
+    loginBtn.innerHTML = \'<i class="fas fa-sign-in-alt"></i><span>登录</span>\';
+  });
+  </script>
 </body>
 </html>'''
+
+
+@app.route('/owner/dashboard')
+def owner_dashboard():
+    """主人后台 Dashboard（完整SPA）"""
+    dashboard_path = os.path.join(os.path.dirname(__file__), '../frontend/owner-dashboard.html')
+    with open(dashboard_path, 'r', encoding='utf-8') as f:
+        return f.read()
 
 
 # ============ 健康检查和调试路由 ============
@@ -269,6 +421,7 @@ def test_ai():
 app.register_blueprint(session_bp)
 app.register_blueprint(message_bp)
 app.register_blueprint(owner_bp)
+app.register_blueprint(visitor_bp)
 
 
 # ============ 数据库初始化 ============
