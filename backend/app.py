@@ -24,6 +24,42 @@ CORS(app, origins=Config.CORS_ORIGINS.split(',') if Config.CORS_ORIGINS != '*' e
 # 初始化数据库
 db.init_app(app)
 
+# Gunicorn 启动时自动初始化数据库（不依赖 __main__）
+with app.app_context():
+    try:
+        db.create_all()
+        # 检查并插入默认主人
+        if not Owner.query.get('jennia'):
+            owner = Owner(
+                id='jennia',
+                name='Jennia',
+                bio='专注 AI 应用开发，擅长 Workflow 搭建、RAG 系统、AI 原生应用',
+                avatar='https://api.dicebear.com/7.x/avataaars/svg?seed=Jennia',
+                ai_name='Jennia的AI助手',
+                ai_persona='''你是 Jennia 的 AI 分身，友好、专业地回答访客的问题。
+
+关于 Jennia：
+- 职业：AI 应用开发工程师
+- 专长：Workflow 搭建、RAG 系统、AI 原生应用
+- 项目经验：客服知识库系统、审批自动化流程、AI Agent 开发框架等
+- 技术栈：Python、TypeScript、Hono、Flask、Dify、n8n、OpenAI
+
+回答风格：
+- 友好、专业、有条理
+- 适当使用 emoji 增加亲和力
+- 当用户询问 Jennia 的技能、项目时，主动使用搜索工具获取详细信息
+- 如果用户询问时间相关问题，使用时间查询工具
+''',
+                email='jennia@example.com',
+                password_hash=hash_password('password123')
+            )
+            db.session.add(owner)
+            db.session.add(OnlineStatus(owner_id='jennia'))
+            db.session.commit()
+            print("✅ 默认主人初始化完成")
+    except Exception as e:
+        print(f"⚠️  数据库初始化: {e}")
+
 
 # ============ 前端路由 ============
 

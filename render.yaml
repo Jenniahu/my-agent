@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: my-agent
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    envVars:
+      - key: DATABASE_URL
+        sync: false          # 在 Render 控制台手动填写
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_BASE_URL
+        value: https://llm-api.mcisaas.com/v1
+      - key: OPENAI_MODEL
+        value: glm-4.7
+      - key: SECRET_KEY
+        generateValue: true  # 自动生成随机密钥
+      - key: DEBUG
+        value: "False"
+      - key: CORS_ORIGINS
+        value: "*"
+    healthCheckPath: /api/ping

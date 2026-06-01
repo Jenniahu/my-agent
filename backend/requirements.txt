@@ -5,6 +5,10 @@ flask-sqlalchemy==3.1.1
 
 # 数据库
 SQLAlchemy==2.0.23
+psycopg2-binary==2.9.9
+
+# 生产服务器
+gunicorn==21.2.0
 
 # 密码哈希
 werkzeug==3.0.1
