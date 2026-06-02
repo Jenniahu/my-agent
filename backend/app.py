@@ -24,11 +24,17 @@ CORS(app, origins=Config.CORS_ORIGINS.split(',') if Config.CORS_ORIGINS != '*' e
 # 初始化数据库
 db.init_app(app)
 
-# Gunicorn 启动时自动初始化数据库（不依赖 __main__）
-with app.app_context():
+# 用 before_request 在第一次请求时初始化数据库（兼容 Gunicorn/Render）
+_db_initialized = False
+
+@app.before_request
+def auto_init_db():
+    global _db_initialized
+    if _db_initialized:
+        return
+    _db_initialized = True
     try:
         db.create_all()
-        # 检查并插入默认主人
         if not Owner.query.get('jennia'):
             owner = Owner(
                 id='jennia',
@@ -59,6 +65,7 @@ with app.app_context():
             print("✅ 默认主人初始化完成")
     except Exception as e:
         print(f"⚠️  数据库初始化: {e}")
+
 
 
 # ============ 前端路由 ============
