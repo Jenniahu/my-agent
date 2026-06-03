@@ -3,6 +3,7 @@ AI 服务类 - 处理 OpenAI 调用和工具集成
 """
 import requests
 import json
+import os
 from config import Config
 from services.tool_service import ToolService
 from models import RequirementConfig
@@ -12,9 +13,23 @@ class AIService:
     """AI 服务类"""
     
     def __init__(self):
-        self.api_key = Config.OPENAI_API_KEY
-        self.base_url = Config.OPENAI_BASE_URL
-        self.model = Config.OPENAI_MODEL
+        # 优先读环境变量（Render/生产环境），找不到再读 .env（本地开发）
+        env_vars = {}
+        env_path = os.path.join(os.path.dirname(__file__), '..', '.env')
+        try:
+            with open(env_path, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#') and '=' in line:
+                        k, v = line.split('=', 1)
+                        env_vars[k.strip()] = v.strip()
+        except Exception:
+            pass
+
+        # os.environ（Render注入）优先，其次 .env 文件，最后默认值
+        self.api_key = os.environ.get('OPENAI_API_KEY') or env_vars.get('OPENAI_API_KEY') or ''
+        self.base_url = os.environ.get('OPENAI_BASE_URL') or env_vars.get('OPENAI_BASE_URL') or 'https://llm-api.mcisaas.com/v1'
+        self.model = os.environ.get('OPENAI_MODEL') or env_vars.get('OPENAI_MODEL') or 'glm-4.7'
         self.tool_service = ToolService()
         
         print(f"\n🤖 AI 服务初始化")
@@ -178,7 +193,11 @@ class AIService:
         Returns:
             dict: OpenAI 响应（统一格式）
         """
-        url = f"{self.base_url}/v1/chat/completions"
+        base = self.base_url.rstrip('/')
+        if base.endswith('/v1') or '/v1/' in base:
+            url = f"{base}/chat/completions"
+        else:
+            url = f"{base}/v1/chat/completions"
         
         payload = {
             'model': self.model,
