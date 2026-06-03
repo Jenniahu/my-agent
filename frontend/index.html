@@ -3,92 +3,149 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>my-agent - 个人 AI 助手平台</title>
+  <title>my-agent · 让每个人都有自己的 AI 分身</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
+  <style>
+    .gradient-text { background: linear-gradient(135deg, #60a5fa, #a78bfa, #f472b6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .card-hover { transition: transform 0.2s, box-shadow 0.2s; }
+    .card-hover:hover { transform: translateY(-4px); box-shadow: 0 20px 40px rgba(0,0,0,0.3); }
+    .glow { box-shadow: 0 0 40px rgba(96, 165, 250, 0.15); }
+  </style>
 </head>
-<body class="bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white min-h-screen flex items-center justify-center p-4">
-  
-  <div class="max-w-2xl w-full">
-    <div class="text-center mb-12">
-      <h1 class="text-5xl font-bold mb-4 bg-gradient-to-r from-blue-400 to-purple-600 bg-clip-text text-transparent">
-        my-agent
-      </h1>
-      <p class="text-gray-400 text-lg">个人 AI 助手平台 · Python 版本</p>
-    </div>
+<body class="bg-gray-950 text-white min-h-screen">
 
-    <div class="bg-gray-800/50 backdrop-blur rounded-2xl p-8 shadow-2xl border border-gray-700">
-      <h2 class="text-2xl font-semibold mb-6 flex items-center gap-2">
-        <i class="fas fa-rocket text-blue-500"></i>
-        快速开始
-      </h2>
-      
-      <div class="space-y-4">
-        <a href="/u/jennia" 
-           class="block bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-xl px-6 py-4 transition transform hover:scale-[1.02] shadow-lg">
-          <div class="flex items-center justify-between">
-            <div>
-              <div class="font-semibold text-lg">💬 与 Jennia 的 AI 助手对话</div>
-              <div class="text-sm text-blue-100 mt-1">体验 OpenAI Function Calling 工具调用</div>
-            </div>
-            <i class="fas fa-arrow-right text-2xl"></i>
-          </div>
-        </a>
-        
-        <a href="/owner/login" 
-           class="block bg-gray-700 hover:bg-gray-600 text-white rounded-xl px-6 py-4 transition transform hover:scale-[1.02]">
-          <div class="flex items-center justify-between">
-            <div>
-              <div class="font-semibold text-lg">👤 主人后台管理</div>
-              <div class="text-sm text-gray-400 mt-1">查看会话、人工接管、配置 AI 人格</div>
-            </div>
-            <i class="fas fa-arrow-right text-2xl"></i>
-          </div>
-        </a>
+  <!-- 导航栏 -->
+  <nav class="border-b border-gray-800 px-6 py-4">
+    <div class="max-w-5xl mx-auto flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-sm font-bold">A</div>
+        <span class="font-bold text-lg">my-agent</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <a href="/login" class="text-gray-400 hover:text-white text-sm transition px-4 py-2">登录</a>
+        <a href="/register" class="bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-2 rounded-lg transition font-medium">免费注册</a>
       </div>
     </div>
+  </nav>
 
-    <div class="mt-8 bg-gray-800/30 backdrop-blur rounded-xl p-6 border border-gray-700/50">
-      <h3 class="font-semibold mb-4 flex items-center gap-2">
-        <i class="fas fa-info-circle text-purple-500"></i>
-        核心特性
-      </h3>
-      <ul class="space-y-2 text-sm text-gray-400">
-        <li class="flex items-start gap-2">
-          <i class="fas fa-check text-green-500 mt-0.5"></i>
-          <span><strong class="text-white">OpenAI Function Calling</strong> - 支持工具调用（时间查询、信息搜索）</span>
-        </li>
-        <li class="flex items-start gap-2">
-          <i class="fas fa-check text-green-500 mt-0.5"></i>
-          <span><strong class="text-white">Flask + SQLite</strong> - 轻量级 Python 后端，易于部署</span>
-        </li>
-        <li class="flex items-start gap-2">
-          <i class="fas fa-check text-green-500 mt-0.5"></i>
-          <span><strong class="text-white">工具自动加载</strong> - 添加新工具只需放入 tools/ 目录</span>
-        </li>
-        <li class="flex items-start gap-2">
-          <i class="fas fa-check text-green-500 mt-0.5"></i>
-          <span><strong class="text-white">人工接管</strong> - 主人可随时查看会话并回复访客</span>
-        </li>
-      </ul>
+  <!-- Hero 区域 -->
+  <section class="max-w-5xl mx-auto px-6 pt-20 pb-16 text-center">
+    <div class="inline-flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 rounded-full px-4 py-1.5 text-blue-400 text-sm mb-8">
+      <i class="fas fa-robot text-xs"></i>
+      <span>AI 分身平台，免费使用</span>
     </div>
+    <h1 class="text-5xl md:text-6xl font-bold mb-6 leading-tight">
+      让每个人都有<br>
+      <span class="gradient-text">自己的 AI 分身</span>
+    </h1>
+    <p class="text-gray-400 text-xl mb-10 max-w-2xl mx-auto leading-relaxed">
+      注册账号，训练专属 AI 替你接待访客、回答问题、展示你的个人品牌。<br>
+      把链接放在简历、名片或个人主页上。
+    </p>
+    <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+      <a href="/register" class="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-8 py-4 rounded-xl font-semibold text-lg transition transform hover:scale-105 shadow-lg shadow-blue-500/25">
+        <i class="fas fa-rocket mr-2"></i>免费创建我的 AI 分身
+      </a>
+      <a href="/u/jennia" class="w-full sm:w-auto bg-gray-800 hover:bg-gray-700 text-white px-8 py-4 rounded-xl font-semibold text-lg transition border border-gray-700">
+        <i class="fas fa-eye mr-2 text-purple-400"></i>查看 Demo
+      </a>
+    </div>
+  </section>
 
-    <div class="mt-6 text-center text-sm text-gray-500">
-      <p>
-        <a href="https://github.com/Jenniahu/my-agent" target="_blank" class="text-blue-400 hover:text-blue-300 transition">
-          <i class="fab fa-github mr-1"></i>
-          GitHub
-        </a>
-        ·
-        <a href="/api/ping" target="_blank" class="text-blue-400 hover:text-blue-300 transition">
-          <i class="fas fa-heartbeat mr-1"></i>
-          API 状态
-        </a>
-        ·
-        <span>v2.0.0 Python 版本</span>
-      </p>
+  <!-- 流程说明 -->
+  <section class="max-w-5xl mx-auto px-6 py-16">
+    <h2 class="text-2xl font-bold text-center mb-12 text-gray-200">三步拥有专属 AI 分身</h2>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div class="bg-gray-900 rounded-2xl p-6 border border-gray-800 card-hover">
+        <div class="w-12 h-12 rounded-xl bg-blue-500/20 flex items-center justify-center text-blue-400 text-xl mb-4">
+          <i class="fas fa-user-plus"></i>
+        </div>
+        <div class="text-blue-400 text-sm font-medium mb-2">第一步</div>
+        <h3 class="font-semibold text-lg mb-2">注册账号</h3>
+        <p class="text-gray-400 text-sm leading-relaxed">填写你的名字、邮箱，设定你的 AI 分身名称和人格特征</p>
+      </div>
+      <div class="bg-gray-900 rounded-2xl p-6 border border-gray-800 card-hover">
+        <div class="w-12 h-12 rounded-xl bg-purple-500/20 flex items-center justify-center text-purple-400 text-xl mb-4">
+          <i class="fas fa-brain"></i>
+        </div>
+        <div class="text-purple-400 text-sm font-medium mb-2">第二步</div>
+        <h3 class="font-semibold text-lg mb-2">训练 AI 人格</h3>
+        <p class="text-gray-400 text-sm leading-relaxed">告诉 AI 你是谁、你做什么、你的风格，AI 会以你的口吻回答问题</p>
+      </div>
+      <div class="bg-gray-900 rounded-2xl p-6 border border-gray-800 card-hover">
+        <div class="w-12 h-12 rounded-xl bg-pink-500/20 flex items-center justify-center text-pink-400 text-xl mb-4">
+          <i class="fas fa-share-alt"></i>
+        </div>
+        <div class="text-pink-400 text-sm font-medium mb-2">第三步</div>
+        <h3 class="font-semibold text-lg mb-2">分享链接</h3>
+        <p class="text-gray-400 text-sm leading-relaxed">把你的专属链接放到简历、名片或个人主页，朋友随时来聊</p>
+      </div>
     </div>
-  </div>
+  </section>
+
+  <!-- 功能特性 -->
+  <section class="max-w-5xl mx-auto px-6 py-16">
+    <h2 class="text-2xl font-bold text-center mb-12 text-gray-200">强大功能，开箱即用</h2>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div class="flex items-start gap-4 bg-gray-900/50 rounded-xl p-5 border border-gray-800">
+        <div class="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center text-green-400 flex-shrink-0">
+          <i class="fas fa-tools"></i>
+        </div>
+        <div>
+          <h4 class="font-medium mb-1">工具调用</h4>
+          <p class="text-gray-400 text-sm">支持时间查询、信息搜索等工具，AI 会自动判断何时调用</p>
+        </div>
+      </div>
+      <div class="flex items-start gap-4 bg-gray-900/50 rounded-xl p-5 border border-gray-800">
+        <div class="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center text-blue-400 flex-shrink-0">
+          <i class="fas fa-user-shield"></i>
+        </div>
+        <div>
+          <h4 class="font-medium mb-1">人工接管</h4>
+          <p class="text-gray-400 text-sm">主人在线时可随时查看对话并亲自回复，无缝切换</p>
+        </div>
+      </div>
+      <div class="flex items-start gap-4 bg-gray-900/50 rounded-xl p-5 border border-gray-800">
+        <div class="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center text-purple-400 flex-shrink-0">
+          <i class="fas fa-history"></i>
+        </div>
+        <div>
+          <h4 class="font-medium mb-1">会话管理</h4>
+          <p class="text-gray-400 text-sm">后台查看所有访客对话记录，了解大家都在问什么</p>
+        </div>
+      </div>
+      <div class="flex items-start gap-4 bg-gray-900/50 rounded-xl p-5 border border-gray-800">
+        <div class="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center text-orange-400 flex-shrink-0">
+          <i class="fas fa-sliders-h"></i>
+        </div>
+        <div>
+          <h4 class="font-medium mb-1">自定义人格</h4>
+          <p class="text-gray-400 text-sm">随时修改 AI 名字、性格、专业背景，打造专属形象</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="max-w-5xl mx-auto px-6 py-16">
+    <div class="bg-gradient-to-r from-blue-900/50 to-purple-900/50 rounded-2xl p-12 text-center border border-blue-500/20 glow">
+      <h2 class="text-3xl font-bold mb-4">现在就创建你的 AI 分身</h2>
+      <p class="text-gray-400 mb-8">完全免费，3分钟完成配置</p>
+      <a href="/register" class="inline-block bg-white text-gray-900 px-10 py-4 rounded-xl font-bold text-lg hover:bg-gray-100 transition transform hover:scale-105">
+        <i class="fas fa-rocket mr-2"></i>立即注册
+      </a>
+    </div>
+  </section>
+
+  <!-- 底部 -->
+  <footer class="border-t border-gray-800 py-8 text-center text-gray-500 text-sm">
+    <p>my-agent · 个人 AI 助手平台 · 
+      <a href="https://github.com/Jenniahu/my-agent" target="_blank" class="text-blue-400 hover:text-blue-300">
+        <i class="fab fa-github mr-1"></i>开源项目
+      </a>
+    </p>
+  </footer>
 
 </body>
 </html>

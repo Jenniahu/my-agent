@@ -78,6 +78,22 @@ def index():
         return f.read()
 
 
+@app.route('/register')
+def register_page():
+    """注册页面"""
+    frontend_path = os.path.join(os.path.dirname(__file__), '../frontend/register.html')
+    with open(frontend_path, 'r', encoding='utf-8') as f:
+        return f.read()
+
+
+@app.route('/login')
+def login_page():
+    """登录页面"""
+    frontend_path = os.path.join(os.path.dirname(__file__), '../frontend/login.html')
+    with open(frontend_path, 'r', encoding='utf-8') as f:
+        return f.read()
+
+
 @app.route('/u/<owner_id>')
 def visitor_chat(owner_id):
     """访客对话页面"""

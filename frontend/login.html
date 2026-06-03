@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>登录 · my-agent</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
+  <style>
+    input:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.15); }
+  </style>
+</head>
+<body class="bg-gray-950 text-white min-h-screen flex flex-col">
+
+  <nav class="border-b border-gray-800 px-6 py-4">
+    <div class="max-w-lg mx-auto flex items-center justify-between">
+      <a href="/" class="flex items-center gap-2">
+        <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-xs font-bold">A</div>
+        <span class="font-bold">my-agent</span>
+      </a>
+      <span class="text-gray-400 text-sm">没有账号？<a href="/register" class="text-blue-400 hover:text-blue-300">免费注册</a></span>
+    </div>
+  </nav>
+
+  <div class="flex-1 flex items-center justify-center px-4 py-12">
+    <div class="w-full max-w-md">
+
+      <div class="text-center mb-8">
+        <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-2xl mx-auto mb-4">
+          <i class="fas fa-user-circle"></i>
+        </div>
+        <h1 class="text-2xl font-bold">欢迎回来</h1>
+        <p class="text-gray-400 text-sm mt-1">登录后台，查看访客对话并管理 AI 分身</p>
+      </div>
+
+      <div class="bg-gray-900 rounded-2xl p-8 border border-gray-800">
+        <div class="space-y-5">
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-1.5">邮箱</label>
+            <input type="email" id="email" placeholder="your@email.com"
+              class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 text-sm transition"
+              onkeydown="if(event.key==='Enter') login()">
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-1.5">密码</label>
+            <div class="relative">
+              <input type="password" id="password" placeholder="输入密码"
+                class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 text-sm transition pr-12"
+                onkeydown="if(event.key==='Enter') login()">
+              <button onclick="togglePwd()" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
+                <i class="fas fa-eye" id="eyeIcon"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div id="loginError" class="mt-4 text-red-400 text-sm hidden"></div>
+
+        <button onclick="login()" id="loginBtn"
+          class="mt-6 w-full bg-blue-600 hover:bg-blue-700 text-white py-3.5 rounded-xl font-semibold transition">
+          <i class="fas fa-sign-in-alt mr-2"></i>登录
+        </button>
+
+        <!-- 默认测试账号提示（生产环境可删除） -->
+        <div class="mt-6 bg-blue-500/10 border border-blue-500/20 rounded-xl p-4">
+          <p class="text-blue-400 text-xs font-medium mb-2"><i class="fas fa-info-circle mr-1"></i>默认测试账号</p>
+          <p class="text-gray-400 text-xs">邮箱：<code class="text-blue-300">jennia@example.com</code></p>
+          <p class="text-gray-400 text-xs mt-1">密码：<code class="text-blue-300">password123</code></p>
+        </div>
+      </div>
+
+      <p class="text-center text-gray-500 text-sm mt-6">
+        还没有账号？<a href="/register" class="text-blue-400 hover:text-blue-300">立即免费注册</a>
+      </p>
+
+    </div>
+  </div>
+
+<script>
+function togglePwd() {
+  const input = document.getElementById('password')
+  const icon = document.getElementById('eyeIcon')
+  if (input.type === 'password') {
+    input.type = 'text'
+    icon.className = 'fas fa-eye-slash'
+  } else {
+    input.type = 'password'
+    icon.className = 'fas fa-eye'
+  }
+}
+
+async function login() {
+  const email = document.getElementById('email').value.trim()
+  const password = document.getElementById('password').value
+  const errEl = document.getElementById('loginError')
+  const btn = document.getElementById('loginBtn')
+  errEl.classList.add('hidden')
+
+  if (!email) return showErr('请输入邮箱')
+  if (!password) return showErr('请输入密码')
+
+  btn.disabled = true
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>登录中...'
+
+  try {
+    const res = await fetch('/api/owner/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    })
+    const data = await res.json()
+
+    if (!res.ok) {
+      showErr(data.error || '邮箱或密码错误')
+      btn.disabled = false
+      btn.innerHTML = '<i class="fas fa-sign-in-alt mr-2"></i>登录'
+      return
+    }
+
+    // 保存 token 和 owner 信息
+    localStorage.setItem('ownerToken', data.token)
+    localStorage.setItem('ownerId', data.owner.id)
+    localStorage.setItem('ownerName', data.owner.name)
+
+    // 跳转后台
+    window.location.href = '/owner/dashboard'
+
+  } catch (e) {
+    showErr('网络错误，请重试')
+    btn.disabled = false
+    btn.innerHTML = '<i class="fas fa-sign-in-alt mr-2"></i>登录'
+  }
+}
+
+function showErr(msg) {
+  const el = document.getElementById('loginError')
+  el.textContent = '⚠️ ' + msg
+  el.classList.remove('hidden')
+}
+</script>
+</body>
+</html>

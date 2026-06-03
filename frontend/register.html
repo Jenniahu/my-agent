@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>注册 · my-agent</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
+  <style>
+    .step { display: none; }
+    .step.active { display: block; }
+    .step-dot { transition: all 0.3s; }
+    input:focus, textarea:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.15); }
+  </style>
+</head>
+<body class="bg-gray-950 text-white min-h-screen flex flex-col">
+
+  <!-- 顶部导航 -->
+  <nav class="border-b border-gray-800 px-6 py-4">
+    <div class="max-w-lg mx-auto flex items-center justify-between">
+      <a href="/" class="flex items-center gap-2">
+        <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-xs font-bold">A</div>
+        <span class="font-bold">my-agent</span>
+      </a>
+      <span class="text-gray-400 text-sm">已有账号？<a href="/login" class="text-blue-400 hover:text-blue-300">登录</a></span>
+    </div>
+  </nav>
+
+  <div class="flex-1 flex items-center justify-center px-4 py-12">
+    <div class="w-full max-w-lg">
+
+      <!-- 步骤指示器 -->
+      <div class="flex items-center justify-center mb-10 gap-2">
+        <div class="flex items-center gap-2" id="stepIndicator1">
+          <div class="step-dot w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-sm font-bold">1</div>
+          <span class="text-sm text-blue-400 font-medium">基本信息</span>
+        </div>
+        <div class="w-8 h-px bg-gray-700 mx-1"></div>
+        <div class="flex items-center gap-2" id="stepIndicator2">
+          <div class="step-dot w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-sm font-bold text-gray-400" id="dot2">2</div>
+          <span class="text-sm text-gray-500" id="label2">AI 人格</span>
+        </div>
+        <div class="w-8 h-px bg-gray-700 mx-1"></div>
+        <div class="flex items-center gap-2" id="stepIndicator3">
+          <div class="step-dot w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-sm font-bold text-gray-400" id="dot3">3</div>
+          <span class="text-sm text-gray-500" id="label3">完成</span>
+        </div>
+      </div>
+
+      <!-- Step 1: 基本信息 -->
+      <div class="step active bg-gray-900 rounded-2xl p-8 border border-gray-800" id="step1">
+        <h2 class="text-2xl font-bold mb-2">创建你的账号</h2>
+        <p class="text-gray-400 text-sm mb-8">填写基本信息，稍后配置你的 AI 分身</p>
+
+        <div class="space-y-5">
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-1.5">
+              你的名字 <span class="text-red-400">*</span>
+            </label>
+            <input type="text" id="name" placeholder="例如：张三" maxlength="30"
+              class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 text-sm transition">
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-1.5">
+              账号 ID <span class="text-red-400">*</span>
+              <span class="text-gray-500 font-normal ml-1">· 用于你的专属链接</span>
+            </label>
+            <div class="flex items-center bg-gray-800 border border-gray-700 rounded-xl overflow-hidden transition" id="idInputWrapper">
+              <span class="px-3 py-3 text-gray-500 text-sm bg-gray-750 border-r border-gray-700">/u/</span>
+              <input type="text" id="ownerId" placeholder="your-id" maxlength="20"
+                class="flex-1 bg-transparent px-3 py-3 text-white placeholder-gray-500 text-sm" style="outline:none">
+            </div>
+            <p class="text-gray-500 text-xs mt-1.5">只能用小写字母、数字、连字符，例如：zhang-san</p>
+            <p class="text-xs mt-1 hidden" id="idError"></p>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-1.5">
+              邮箱 <span class="text-red-400">*</span>
+            </label>
+            <input type="email" id="email" placeholder="your@email.com"
+              class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 text-sm transition">
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-1.5">
+              密码 <span class="text-red-400">*</span>
+            </label>
+            <input type="password" id="password" placeholder="至少 6 位"
+              class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 text-sm transition">
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-1.5">一句话介绍你自己</label>
+            <input type="text" id="bio" placeholder="例如：AI 应用开发工程师，专注 Workflow 搭建" maxlength="100"
+              class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 text-sm transition">
+          </div>
+        </div>
+
+        <div id="step1Error" class="mt-4 text-red-400 text-sm hidden"></div>
+
+        <button onclick="goStep2()"
+          class="mt-8 w-full bg-blue-600 hover:bg-blue-700 text-white py-3.5 rounded-xl font-semibold transition">
+          下一步：配置 AI 人格 <i class="fas fa-arrow-right ml-2"></i>
+        </button>
+      </div>
+
+      <!-- Step 2: AI 人格配置 -->
+      <div class="step bg-gray-900 rounded-2xl p-8 border border-gray-800" id="step2">
+        <h2 class="text-2xl font-bold mb-2">配置你的 AI 分身</h2>
+        <p class="text-gray-400 text-sm mb-8">让 AI 了解你是谁，它会以你的口吻与访客对话</p>
+
+        <div class="space-y-5">
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-1.5">
+              AI 助手名称 <span class="text-red-400">*</span>
+            </label>
+            <input type="text" id="aiName" placeholder="例如：Jennia 的 AI 助手" maxlength="30"
+              class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 text-sm transition">
+            <p class="text-gray-500 text-xs mt-1.5">访客看到的 AI 名字</p>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-1.5">
+              AI 人格设定 <span class="text-red-400">*</span>
+            </label>
+            <textarea id="aiPersona" rows="8" placeholder="告诉 AI 你是谁，例如：
+
+你是 [你的名字] 的 AI 分身，友好、专业地回答访客问题。
+
+关于我：
+- 职业：AI 应用开发工程师
+- 专长：Workflow 搭建、RAG 系统
+- 技术栈：Python、TypeScript
+
+回答风格：
+- 友好有条理，适当用 emoji
+- 遇到不确定的问题，诚实说不知道"
+              class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 text-sm transition resize-none leading-relaxed"></textarea>
+            <p class="text-gray-500 text-xs mt-1.5">越详细，AI 回答越准确。注册后随时可以修改。</p>
+          </div>
+        </div>
+
+        <div id="step2Error" class="mt-4 text-red-400 text-sm hidden"></div>
+
+        <div class="flex gap-3 mt-8">
+          <button onclick="goStep1()"
+            class="flex-1 bg-gray-800 hover:bg-gray-700 text-white py-3.5 rounded-xl font-medium transition border border-gray-700">
+            <i class="fas fa-arrow-left mr-2"></i>上一步
+          </button>
+          <button onclick="submitRegister()"
+            class="flex-[2] bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white py-3.5 rounded-xl font-semibold transition" id="submitBtn">
+            <i class="fas fa-rocket mr-2"></i>创建我的 AI 分身
+          </button>
+        </div>
+      </div>
+
+      <!-- Step 3: 完成 -->
+      <div class="step bg-gray-900 rounded-2xl p-8 border border-gray-800 text-center" id="step3">
+        <div class="w-20 h-20 rounded-full bg-green-500/20 flex items-center justify-center text-green-400 text-4xl mx-auto mb-6">
+          <i class="fas fa-check-circle"></i>
+        </div>
+        <h2 class="text-2xl font-bold mb-2">🎉 创建成功！</h2>
+        <p class="text-gray-400 mb-8">你的 AI 分身已准备好，快去看看吧</p>
+
+        <div class="bg-gray-800 rounded-xl p-4 mb-6 text-left">
+          <p class="text-gray-400 text-xs mb-2">你的专属链接</p>
+          <div class="flex items-center gap-2">
+            <p class="text-blue-400 font-medium flex-1 truncate" id="myLink"></p>
+            <button onclick="copyLink()" class="text-gray-400 hover:text-white text-sm px-3 py-1 bg-gray-700 rounded-lg transition">
+              <i class="fas fa-copy"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="space-y-3">
+          <a id="chatLink" href="#"
+            class="block bg-blue-600 hover:bg-blue-700 text-white py-3.5 rounded-xl font-semibold transition">
+            <i class="fas fa-eye mr-2"></i>预览我的 AI 聊天页
+          </a>
+          <a href="/login"
+            class="block bg-gray-800 hover:bg-gray-700 text-white py-3.5 rounded-xl font-medium transition border border-gray-700">
+            <i class="fas fa-cog mr-2"></i>进入后台管理
+          </a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+<script>
+let registeredId = ''
+
+function goStep1() {
+  document.getElementById('step1').classList.add('active')
+  document.getElementById('step2').classList.remove('active')
+  document.getElementById('dot2').className = 'step-dot w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-sm font-bold text-gray-400'
+  document.getElementById('label2').className = 'text-sm text-gray-500'
+}
+
+function goStep2() {
+  const name = document.getElementById('name').value.trim()
+  const id = document.getElementById('ownerId').value.trim()
+  const email = document.getElementById('email').value.trim()
+  const password = document.getElementById('password').value
+
+  const errEl = document.getElementById('step1Error')
+  errEl.classList.add('hidden')
+
+  if (!name) return showErr(errEl, '请填写你的名字')
+  if (!id) return showErr(errEl, '请填写账号 ID')
+  if (!/^[a-z0-9-]+$/.test(id)) return showErr(errEl, '账号 ID 只能使用小写字母、数字和连字符')
+  if (!email || !email.includes('@')) return showErr(errEl, '请填写有效的邮箱地址')
+  if (!password || password.length < 6) return showErr(errEl, '密码至少 6 位')
+
+  // 预填 AI 名称
+  const aiNameEl = document.getElementById('aiName')
+  if (!aiNameEl.value) aiNameEl.value = name + ' 的 AI 助手'
+
+  document.getElementById('step1').classList.remove('active')
+  document.getElementById('step2').classList.add('active')
+  document.getElementById('dot2').className = 'step-dot w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-sm font-bold'
+  document.getElementById('label2').className = 'text-sm text-blue-400 font-medium'
+}
+
+async function submitRegister() {
+  const aiName = document.getElementById('aiName').value.trim()
+  const aiPersona = document.getElementById('aiPersona').value.trim()
+  const errEl = document.getElementById('step2Error')
+  errEl.classList.add('hidden')
+
+  if (!aiName) return showErr(errEl, '请填写 AI 助手名称')
+  if (!aiPersona || aiPersona.length < 20) return showErr(errEl, '请详细描述 AI 人格（至少 20 个字）')
+
+  const btn = document.getElementById('submitBtn')
+  btn.disabled = true
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>创建中...'
+
+  try {
+    const res = await fetch('/api/owner/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: document.getElementById('ownerId').value.trim(),
+        name: document.getElementById('name').value.trim(),
+        bio: document.getElementById('bio').value.trim(),
+        email: document.getElementById('email').value.trim(),
+        password: document.getElementById('password').value,
+        ai_name: aiName,
+        ai_persona: aiPersona
+      })
+    })
+    const data = await res.json()
+    if (!res.ok) {
+      showErr(errEl, data.error || '注册失败，请重试')
+      btn.disabled = false
+      btn.innerHTML = '<i class="fas fa-rocket mr-2"></i>创建我的 AI 分身'
+      return
+    }
+
+    // 成功
+    registeredId = data.ownerId
+    const link = window.location.origin + '/u/' + registeredId
+    document.getElementById('myLink').textContent = link
+    document.getElementById('chatLink').href = '/u/' + registeredId
+
+    document.getElementById('step2').classList.remove('active')
+    document.getElementById('step3').classList.add('active')
+    document.getElementById('dot3').className = 'step-dot w-8 h-8 rounded-full bg-green-500 flex items-center justify-center text-sm font-bold'
+    document.getElementById('label3').className = 'text-sm text-green-400 font-medium'
+
+  } catch (e) {
+    showErr(errEl, '网络错误，请重试')
+    btn.disabled = false
+    btn.innerHTML = '<i class="fas fa-rocket mr-2"></i>创建我的 AI 分身'
+  }
+}
+
+function copyLink() {
+  const link = window.location.origin + '/u/' + registeredId
+  navigator.clipboard.writeText(link).then(() => {
+    const btn = event.target.closest('button')
+    btn.innerHTML = '<i class="fas fa-check text-green-400"></i>'
+    setTimeout(() => btn.innerHTML = '<i class="fas fa-copy"></i>', 2000)
+  })
+}
+
+function showErr(el, msg) {
+  el.textContent = '⚠️ ' + msg
+  el.classList.remove('hidden')
+}
+
+// ID 格式实时校验
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('ownerId').addEventListener('input', function() {
+    this.value = this.value.toLowerCase().replace(/[^a-z0-9-]/g, '')
+  })
+})
+</script>
+</body>
+</html>
