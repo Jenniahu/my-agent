@@ -50,6 +50,7 @@ class ProcessedMessage:
     source_id: str
     processing_log: List[str]
     priority_score: float
+    original_index: int = 0  # 原始消息在列表中的位置，用于恢复时间顺序
 
 
 class ContextPolicy(ABC):
@@ -210,12 +211,22 @@ class ContextEngine:
 
     def _apply_policies(self, messages: List[RawMessage],
                        context: Dict) -> List[ProcessedMessage]:
-        """应用策略链"""
-        result = []
+        """
+        并行应用多个策略并累加分数
+
+        每个策略独立对全量 raw_messages 打分，最终得分 = 各策略得分之和（可扩展为加权）
+        """
+        if not messages:
+            return []
+
+        # 初始化累计得分表（索引 → 总分）
+        score_accum = [0.0] * len(messages)
+        # 只需任意一个策略的输出来带 role/content/source_id/original_index
+        base_processed: List[ProcessedMessage] = []
 
         for policy in self.policies:
             start = time.time()
-            result = policy.process(messages, context)
+            policy_result = policy.process(messages, context)
             elapsed = (time.time() - start) * 1000
 
             self.decision_log.append({
@@ -224,6 +235,26 @@ class ContextEngine:
                 "elapsed_ms": round(elapsed, 2),
                 "metrics": policy.get_metrics()
             })
+
+            # 累加得分
+            for i, pm in enumerate(policy_result):
+                score_accum[i] += pm.priority_score
+
+            # 第一个策略的输出作为 base（保留 role/content/source_id/original_index）
+            if not base_processed:
+                base_processed = policy_result
+
+        # 用累加得分更新 priority_score
+        result = []
+        for i, pm in enumerate(base_processed):
+            result.append(ProcessedMessage(
+                role=pm.role,
+                content=pm.content,
+                source_id=pm.source_id,
+                processing_log=pm.processing_log,
+                priority_score=score_accum[i],
+                original_index=pm.original_index
+            ))
 
         return result
 
@@ -239,7 +270,7 @@ class ContextEngine:
         available = self.budget.available_for_history
         available -= self.counter.count(new_message)
 
-        # 按分数降序排序
+        # 按分数降序排序（贪心选取高优先级消息）
         scored.sort(key=lambda x: x[0], reverse=True)
 
         selected = []
@@ -251,8 +282,8 @@ class ContextEngine:
                 selected.append(msg)
                 used += cost
 
-        # 按时间顺序重新排序（保持对话连贯性）
-        # 注意：这里简化处理，实际应保留原始顺序信息
+        # 按原始时间顺序重新排序，保持对话连贯性
+        selected.sort(key=lambda m: m.original_index)
 
         return selected, {
             "budget_available": available,

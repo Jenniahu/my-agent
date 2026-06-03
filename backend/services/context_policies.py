@@ -50,7 +50,8 @@ class RecencyPolicy(ContextPolicy):
                 content=msg.content,
                 source_id=msg.id,
                 processing_log=[f"{self.name}: score={score:.3f}, position={position_from_end}"],
-                priority_score=score
+                priority_score=score,
+                original_index=idx
             ))
 
         return processed
@@ -120,7 +121,8 @@ class StructurePolicy(ContextPolicy):
                 content=msg.content,
                 source_id=msg.id,
                 processing_log=[f"{self.name}: tags={tags}, boost={boost:.2f}"],
-                priority_score=min(1.0, boost)  # 最高不超过 1.0
+                priority_score=min(1.0, boost),  # 最高不超过 1.0
+                original_index=idx
             ))
 
         return processed
@@ -166,7 +168,8 @@ class DeduplicationPolicy(ContextPolicy):
                 content=msg.content,
                 source_id=msg.id,
                 processing_log=[f"{self.name}: tags={tags}, penalty={penalty}"],
-                priority_score=max(0.0, 0.5 - penalty)  # 基础分 0.5，重复则降低
+                priority_score=max(0.0, 0.5 - penalty),  # 基础分 0.5，重复则降低
+                original_index=idx
             ))
 
         return processed
